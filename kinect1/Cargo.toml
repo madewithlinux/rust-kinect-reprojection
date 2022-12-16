@@ -1,11 +1,11 @@
 [package]
-name = "rust-kinect-reprojection"
+name = "kinect1"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kinect1 = {path = "../kinect1"}
-anyhow = "1.0.66"
+kinect1-sys = {path = "../kinect1-sys"}
+winresult = "0.1.3"
 thiserror = "1.0"

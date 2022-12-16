@@ -2,4 +2,7 @@
 
 members=[
     "app",
+    "kinect1",
+    "kinect1-sys",
+    "kinect1-autocxx",
 ]
