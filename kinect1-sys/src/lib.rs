@@ -13,6 +13,7 @@ impl Default for NUI_IMAGE_VIEW_AREA {
         }
     }
 }
+
 impl Default for NUI_IMAGE_FRAME {
     fn default() -> Self {
         Self {

@@ -159,6 +159,12 @@ impl Sensor {
     }
 }
 
+impl Drop for Sensor {
+    fn drop(&mut self) {
+        self.release()
+    }
+}
+
 pub fn get_next_frame_data(sensor: &mut Sensor, stream: HANDLE) -> KinectResult<Vec<u8>> {
     let frame = sensor.image_stream_get_next_frame(stream)?;
     dbg!(&frame);
