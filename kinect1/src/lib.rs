@@ -4,6 +4,7 @@ use std::{
     ptr::{self, null_mut},
 };
 
+use image::RgbImage;
 // use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
 use kinect1_sys::{
     INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, NuiImageStreamGetNextFrame, HRESULT, NUI_IMAGE_FRAME,
@@ -120,7 +121,6 @@ impl Sensor {
         dw_image_frame_flags: u32,
         dw_frame_limit: u32,
         h_next_frame_event: *mut c_void,
-        // ph_stream_handle: *mut *mut c_void,
     ) -> KinectResult<HANDLE> {
         let mut ph_stream_handle: HANDLE = null_mut();
         try_call_method!(
@@ -131,12 +131,16 @@ impl Sensor {
             dw_image_frame_flags,
             dw_frame_limit,
             h_next_frame_event,
-            // ph_stream_handle
             &mut ph_stream_handle
         )?;
         Ok(ph_stream_handle)
     }
 
+    pub fn shutdown(&mut self) {
+        unsafe {
+            delegate_method!(self, NuiShutdown)(self.delegate);
+        }
+    }
     pub fn release(&mut self) {
         unsafe {
             delegate_method!(self, Release)(self.delegate);
@@ -157,53 +161,61 @@ impl Sensor {
         try_call_method!(self.delegate, NuiImageStreamReleaseFrame, stream, &mut *frame)?;
         Ok(())
     }
+
+    pub fn get_next_frame(self: &mut Sensor, stream: HANDLE) -> KinectResult<RgbImage> {
+        let (width, height, bgra_data) = self.get_next_frame_data(stream)?;
+        let rgb_data = build_color_rgb_image_buffer(width, height, bgra_data);
+        Ok(RgbImage::from_vec(width as u32, height as u32, rgb_data).unwrap())
+    }
+
+    pub fn get_next_frame_data(self: &mut Sensor, stream: HANDLE) -> KinectResult<(usize, usize, Vec<u8>)> {
+        let frame = self.image_stream_get_next_frame(stream)?;
+        dbg!(&frame);
+
+        let mut locked_rect: NUI_LOCKED_RECT = Default::default();
+        try_call_method!(frame.pFrameTexture, LockRect, 0, &mut locked_rect, null_mut(), 0)?;
+        dbg!(locked_rect);
+
+        let texture_pitch = locked_rect.Pitch as usize;
+
+        let (width, height) = convert_resolution_to_size(frame.eResolution);
+        let bpp = 4;
+        let mem_size = width * height * bpp;
+        let mut frame_data = vec![0u8; mem_size];
+        let frame_data_pitch = width * bpp;
+
+        let best_pitch = std::cmp::min(frame_data_pitch, texture_pitch);
+        dbg!(
+            width,
+            height,
+            bpp,
+            mem_size,
+            locked_rect.size,
+            frame_data_pitch,
+            texture_pitch,
+            best_pitch
+        );
+
+        let input_slice = unsafe { std::slice::from_raw_parts(locked_rect.pBits, locked_rect.size as usize) };
+        for y in 0..height {
+            // dbg!(y, y * texture_pitch, y * frame_data_pitch);
+            // let input_slice = unsafe { std::slice::from_raw_parts(locked_rect.pBits, y * texture_pitch) };
+            frame_data[y * frame_data_pitch..y * frame_data_pitch + best_pitch]
+                .copy_from_slice(&input_slice[y * texture_pitch..y * texture_pitch + best_pitch]);
+        }
+
+        try_call_method!(frame.pFrameTexture, UnlockRect, 0)?;
+
+        self.image_stream_release_frame(stream, frame)?;
+        Ok((width, height, frame_data))
+    }
 }
 
 impl Drop for Sensor {
     fn drop(&mut self) {
-        self.release()
+        self.shutdown();
+        self.release();
     }
-}
-
-pub fn get_next_frame_data(sensor: &mut Sensor, stream: HANDLE) -> KinectResult<Vec<u8>> {
-    let frame = sensor.image_stream_get_next_frame(stream)?;
-    dbg!(&frame);
-
-    let mut locked_rect: NUI_LOCKED_RECT = Default::default();
-    try_call_method!(frame.pFrameTexture, LockRect, 0, &mut locked_rect, null_mut(), 0)?;
-    dbg!(locked_rect);
-
-    let texture_pitch = locked_rect.Pitch as usize;
-
-    let (width, height) = convert_resolution_to_size(frame.eResolution);
-    let bpp = 4;
-    let mem_size = width * height * bpp;
-    let mut frame_data = vec![0u8; mem_size];
-    let frame_data_pitch = width * bpp;
-
-    let best_pitch = std::cmp::min(frame_data_pitch, texture_pitch);
-    dbg!(
-        width,
-        height,
-        bpp,
-        mem_size,
-        frame_data_pitch,
-        texture_pitch,
-        best_pitch
-    );
-
-    let input_slice = unsafe { std::slice::from_raw_parts(locked_rect.pBits, locked_rect.size as usize) };
-    for y in 0..height {
-        // dbg!(y, y * texture_pitch, y * frame_data_pitch);
-        // let input_slice = unsafe { std::slice::from_raw_parts(locked_rect.pBits, y * texture_pitch) };
-        frame_data[y * frame_data_pitch..y * frame_data_pitch + best_pitch]
-            .copy_from_slice(&input_slice[y * texture_pitch..y * texture_pitch + best_pitch]);
-    }
-
-    try_call_method!(frame.pFrameTexture, UnlockRect, 0)?;
-
-    sensor.image_stream_release_frame(stream, frame)?;
-    Ok(frame_data)
 }
 
 pub fn convert_resolution_to_size(resolution: NUI_IMAGE_RESOLUTION) -> (usize, usize) {
@@ -216,3 +228,19 @@ pub fn convert_resolution_to_size(resolution: NUI_IMAGE_RESOLUTION) -> (usize, u
         r => panic!("unknown resolution {}", r),
     }
 }
+
+fn build_color_rgb_image_buffer(width: usize, height: usize, bgra_data: Vec<u8>) -> Vec<u8> {
+    let mut rgb_data = vec![0; width * height * 3];
+    for i in 0..(width * height) {
+        rgb_data[i * 3] = bgra_data[i * 4 + 2];
+        rgb_data[i * 3 + 1] = bgra_data[i * 4 + 1];
+        rgb_data[i * 3 + 2] = bgra_data[i * 4];
+    }
+    rgb_data
+}
+
+// pub struct ColorFrameData {
+//     width: usize,
+//     height: usize,
+//     data: Vec<u8>,
+// }

@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -11,6 +12,12 @@
  * <div rustbindgen replaces="LARGE_INTEGER"></div>
  */
 typedef LONGLONG LARGE_INTEGER_simple;
+
+/**
+ * <div rustbindgen mustusetype></div>
+ * <div rustbindgen replaces="HRESULT"></div>
+ */
+typedef int32_t HRESULT_simple;
 
 // TODO: maybe find a real fix, instead of changing this thing from "NuiSensor.h"
 #define DEFINE_UUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8)
