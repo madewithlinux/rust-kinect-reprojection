@@ -4,5 +4,15 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"*.md": "markdown",
+			"*.effect": "hlsl",
+			"nuiapi.h": "c",
+			"cstddef": "cpp",
+			"system_types.h": "c",
+			"constants.h": "c",
+			"nui_sensor_interface.h": "c"
+		}
+	}
 }

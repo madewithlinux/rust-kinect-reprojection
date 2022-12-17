@@ -1,3 +1,6 @@
+#define COBJMACROS
+#define CINTERFACE
+
 /************************************************************************
 *                                                                       *
 *   NuiApi.h -- This module aggregates all the Natural User             *
@@ -26,7 +29,7 @@ extern "C" {
 #define NUI_INITIALIZE_FLAG_USES_AUDIO                  0x10000000
 #define NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX 0x00000001
 #define NUI_INITIALIZE_FLAG_USES_COLOR                  0x00000002
-#define NUI_INITIALIZE_FLAG_USES_SKELETON               0x00000008  
+#define NUI_INITIALIZE_FLAG_USES_SKELETON               0x00000008
 #define NUI_INITIALIZE_FLAG_USES_DEPTH                  0x00000020
 #define NUI_INITIALIZE_FLAG_USES_HIGH_QUALITY_COLOR     0x00000040  // implies COLOR stream will be from uncompressed YUY2 @ 15fps
 
