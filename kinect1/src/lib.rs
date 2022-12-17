@@ -3,7 +3,8 @@ use std::{
     ptr::{self, null_mut},
 };
 
-use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
+// use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
+use kinect1_sys::{INuiSensor, HRESULT, NuiCreateSensorByIndex, NuiGetSensorCount};
 pub use kinect1_sys::{
     _NUI_IMAGE_RESOLUTION_NUI_IMAGE_RESOLUTION_640x480 as NUI_IMAGE_RESOLUTION_640x480,
     NUI_IMAGE_RESOLUTION, NUI_IMAGE_TYPE, NUI_INITIALIZE_DEFAULT_HARDWARE_THREAD,
@@ -40,7 +41,7 @@ fn check_fail(raw_hresult: HRESULT) -> Result<(), KinectError> {
 pub fn get_sensor_count() -> KinectResult<i32> {
     unsafe {
         let mut i_sensor_count = 0;
-        check_fail(c_NuiGetSensorCount(&mut i_sensor_count))?;
+        check_fail(NuiGetSensorCount(&mut i_sensor_count))?;
         Ok(i_sensor_count)
     }
 }
@@ -82,50 +83,50 @@ impl Sensor {
     pub fn create_sensor_by_index(index: i32) -> KinectResult<Sensor> {
         unsafe {
             let mut p_nui_sensor: *mut INuiSensor = ptr::null_mut();
-            check_fail(c_NuiCreateSensorByIndex(index, &mut p_nui_sensor))?;
+            check_fail(NuiCreateSensorByIndex(index, &mut p_nui_sensor))?;
             Ok(Sensor {
                 delegate: p_nui_sensor,
             })
         }
     }
-    pub fn status(&mut self) -> KinectResult<()> {
-        check_fail(unsafe { kinect1_sys::c_INuiSensor_NuiStatus(self.delegate) })
-    }
     // pub fn status(&mut self) -> KinectResult<()> {
-    //     try_call_method!(self, NuiStatus)
+    //     check_fail(unsafe { kinect1_sys::c_INuiSensor_NuiStatus(self.delegate) })
     // }
+    pub fn status(&mut self) -> KinectResult<()> {
+        try_call_method!(self, NuiStatus)
+    }
 
-    // pub fn initialize(&mut self, flags: u32) -> KinectResult<()> {
-    //     try_call_method!(self, NuiInitialize, flags)
-    // }
+    pub fn initialize(&mut self, flags: u32) -> KinectResult<()> {
+        try_call_method!(self, NuiInitialize, flags)
+    }
 
-    // pub fn image_stream_open(
-    //     &mut self,
-    //     e_image_type: NUI_IMAGE_TYPE,
-    //     e_resolution: NUI_IMAGE_RESOLUTION,
-    //     dw_image_frame_flags: u32,
-    //     dw_frame_limit: u32,
-    //     h_next_frame_event: *mut c_void,
-    //     // ph_stream_handle: *mut *mut c_void,
-    // ) -> KinectResult<*mut c_void> {
-    //     let mut ph_stream_handle: *mut c_void = null_mut();
-    //     try_call_method!(
-    //         self,
-    //         NuiImageStreamOpen,
-    //         e_image_type,
-    //         e_resolution,
-    //         dw_image_frame_flags,
-    //         dw_frame_limit,
-    //         h_next_frame_event,
-    //         // ph_stream_handle
-    //         &mut ph_stream_handle
-    //     )?;
-    //     Ok(ph_stream_handle)
-    // }
+    pub fn image_stream_open(
+        &mut self,
+        e_image_type: NUI_IMAGE_TYPE,
+        e_resolution: NUI_IMAGE_RESOLUTION,
+        dw_image_frame_flags: u32,
+        dw_frame_limit: u32,
+        h_next_frame_event: *mut c_void,
+        // ph_stream_handle: *mut *mut c_void,
+    ) -> KinectResult<*mut c_void> {
+        let mut ph_stream_handle: *mut c_void = null_mut();
+        try_call_method!(
+            self,
+            NuiImageStreamOpen,
+            e_image_type,
+            e_resolution,
+            dw_image_frame_flags,
+            dw_frame_limit,
+            h_next_frame_event,
+            // ph_stream_handle
+            &mut ph_stream_handle
+        )?;
+        Ok(ph_stream_handle)
+    }
 
-    // pub fn release(&mut self) {
-    //     unsafe {
-    //         method!(self, Release)(self.delegate);
-    //     }
-    // }
+    pub fn release(&mut self) {
+        unsafe {
+            method!(self, Release)(self.delegate);
+        }
+    }
 }

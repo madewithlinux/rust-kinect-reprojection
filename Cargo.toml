@@ -4,5 +4,6 @@ members=[
     "app",
     "kinect1",
     "kinect1-sys",
-    "kinect1-autocxx",
+    "kinect1-cc",
+    # "kinect1-autocxx",
 ]
