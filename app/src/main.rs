@@ -31,23 +31,11 @@ fn main() -> Result<()> {
 
     dbg!(sensor.status()?);
 
-    // for i in 0..10 {
-    //     let frame = sensor.image_stream_get_next_frame(stream)?;
-    //     dbg!(i, &frame);
-    //     sensor.image_stream_release_frame(stream, frame)?;
-    // }
-
-    // for i in 0..10 {
-    //     let (width, height, frame_data) = sensor.get_next_frame_data(stream)?;
-    //     // dbg!(i, &frame_data);
-    //     let avg_pix: f64 = frame_data.iter().map(|&v| v as f64).sum::<f64>() / (frame_data.len() as f64);
-    //     dbg!(i, &avg_pix);
-    // }
-
     let rgb_output_dir = PathBuf::from("data/rgb_frames/");
     create_dir_all(&rgb_output_dir)?;
     // save some frames
     for i in 0..10 {
+        dbg!(i);
         let frame = sensor.get_next_frame(stream)?;
         frame.save(rgb_output_dir.join(format!("kinect_rgb_data_{}.png", i)))?;
     }

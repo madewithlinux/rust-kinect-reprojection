@@ -4,6 +4,7 @@ use std::{
     ptr::{self, null_mut},
 };
 
+use hresult_helper::try_get_nui_hresult_name;
 use image::RgbImage;
 // use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
 use kinect1_sys::{
@@ -39,16 +40,26 @@ pub use kinect1_sys::{
 use thiserror::Error;
 use winresult::{HResult, HResultError};
 
+mod hresult_helper;
+
 #[derive(Error, Debug)]
 pub enum KinectError {
     #[error("HResultError({0:?})")]
     Hre(HResultError),
+    #[error("NuiError({0})")]
+    NuiError(String),
 }
 
 pub type KinectResult<T> = Result<T, KinectError>;
 
 fn check_fail(raw_hresult: HRESULT) -> Result<(), KinectError> {
-    HResult::from(raw_hresult)
+    if raw_hresult == hresult_helper::S_OK {
+        return Ok(());
+    }
+    if let Some(nui_hresult_name) = hresult_helper::try_get_nui_hresult_name(raw_hresult) {
+        return Err(KinectError::NuiError(nui_hresult_name));
+    }
+    HResult::from(raw_hresult as i32)
         .succeeded()
         .map_err(|e| KinectError::Hre(e))?;
     Ok(())
@@ -70,11 +81,6 @@ pub struct Sensor {
 macro_rules! vtable_method {
     ($mut_ref_self:expr, $method_name:ident) => {
         (*$mut_ref_self).lpVtbl.as_mut().unwrap().$method_name.unwrap()
-    };
-}
-macro_rules! delegate_method {
-    ($self:expr, $method_name:ident) => {
-        (*$self.delegate).lpVtbl.as_mut().unwrap().$method_name.unwrap()
     };
 }
 macro_rules! try_call_method {
@@ -103,9 +109,7 @@ impl Sensor {
             Ok(Sensor { delegate: p_nui_sensor })
         }
     }
-    // pub fn status(&mut self) -> KinectResult<()> {
-    //     check_fail(unsafe { kinect1_sys::c_INuiSensor_NuiStatus(self.delegate) })
-    // }
+
     pub fn status(&mut self) -> KinectResult<()> {
         try_call_method!(self.delegate, NuiStatus)
     }
@@ -138,27 +142,28 @@ impl Sensor {
 
     pub fn shutdown(&mut self) {
         unsafe {
-            delegate_method!(self, NuiShutdown)(self.delegate);
+            vtable_method!(self.delegate, NuiShutdown)(self.delegate);
         }
     }
+
     pub fn release(&mut self) {
         unsafe {
-            delegate_method!(self, Release)(self.delegate);
+            vtable_method!(self.delegate, Release)(self.delegate);
         }
     }
 
-    pub fn image_stream_get_next_frame(&mut self, stream: HANDLE) -> KinectResult<Pin<Box<NUI_IMAGE_FRAME>>> {
-        let mut frame = Box::pin(NUI_IMAGE_FRAME::default());
-        try_call_method!(self.delegate, NuiImageStreamGetNextFrame, stream, 1000, &mut *frame)?;
-        Ok(frame)
-    }
-
-    pub fn image_stream_release_frame(
+    fn image_stream_get_next_frame(
         &mut self,
         stream: HANDLE,
-        mut frame: Pin<Box<NUI_IMAGE_FRAME>>,
+        ms_to_wait: u32,
+        out_frame: *mut NUI_IMAGE_FRAME,
     ) -> KinectResult<()> {
-        try_call_method!(self.delegate, NuiImageStreamReleaseFrame, stream, &mut *frame)?;
+        try_call_method!(self.delegate, NuiImageStreamGetNextFrame, stream, ms_to_wait, out_frame)?;
+        Ok(())
+    }
+
+    fn image_stream_release_frame(&mut self, stream: HANDLE, mut frame: *mut NUI_IMAGE_FRAME) -> KinectResult<()> {
+        try_call_method!(self.delegate, NuiImageStreamReleaseFrame, stream, frame)?;
         Ok(())
     }
 
@@ -168,13 +173,14 @@ impl Sensor {
         Ok(RgbImage::from_vec(width as u32, height as u32, rgb_data).unwrap())
     }
 
-    pub fn get_next_frame_data(self: &mut Sensor, stream: HANDLE) -> KinectResult<(usize, usize, Vec<u8>)> {
-        let frame = self.image_stream_get_next_frame(stream)?;
-        dbg!(&frame);
+    fn get_next_frame_data(self: &mut Sensor, stream: HANDLE) -> KinectResult<(usize, usize, Vec<u8>)> {
+        let mut frame = NUI_IMAGE_FRAME::default();
+        self.image_stream_get_next_frame(stream, 1000, &mut frame)?;
+        // dbg!(&frame);
 
         let mut locked_rect: NUI_LOCKED_RECT = Default::default();
         try_call_method!(frame.pFrameTexture, LockRect, 0, &mut locked_rect, null_mut(), 0)?;
-        dbg!(locked_rect);
+        // dbg!(locked_rect);
 
         let texture_pitch = locked_rect.Pitch as usize;
 
@@ -182,41 +188,40 @@ impl Sensor {
         let bpp = 4;
         let mem_size = width * height * bpp;
         let mut frame_data = vec![0u8; mem_size];
-        let frame_data_pitch = width * bpp;
-
-        let best_pitch = std::cmp::min(frame_data_pitch, texture_pitch);
-        dbg!(
-            width,
-            height,
-            bpp,
-            mem_size,
-            locked_rect.size,
-            frame_data_pitch,
-            texture_pitch,
-            best_pitch
-        );
+        // let frame_data_pitch = width * bpp;
+        // let best_pitch = std::cmp::min(frame_data_pitch, texture_pitch);
+        // dbg!(
+        //     width,
+        //     height,
+        //     bpp,
+        //     mem_size,
+        //     locked_rect.size,
+        //     frame_data_pitch,
+        //     texture_pitch,
+        //     best_pitch
+        // );
 
         let input_slice = unsafe { std::slice::from_raw_parts(locked_rect.pBits, locked_rect.size as usize) };
-        for y in 0..height {
-            // dbg!(y, y * texture_pitch, y * frame_data_pitch);
-            // let input_slice = unsafe { std::slice::from_raw_parts(locked_rect.pBits, y * texture_pitch) };
-            frame_data[y * frame_data_pitch..y * frame_data_pitch + best_pitch]
-                .copy_from_slice(&input_slice[y * texture_pitch..y * texture_pitch + best_pitch]);
-        }
+        frame_data.copy_from_slice(input_slice);
 
         try_call_method!(frame.pFrameTexture, UnlockRect, 0)?;
 
-        self.image_stream_release_frame(stream, frame)?;
+        self.image_stream_release_frame(stream, &mut frame)?;
         Ok((width, height, frame_data))
     }
 }
 
-impl Drop for Sensor {
-    fn drop(&mut self) {
-        self.shutdown();
-        self.release();
-    }
-}
+// don't bother, since this takes too long
+// impl Drop for Sensor {
+//     fn drop(&mut self) {
+//         // this seems to take a while, for some reason
+//         // dbg!("sensor shutdown");
+//         self.shutdown();
+//         // dbg!("sensor release");
+//         self.release();
+//         // dbg!("sensor dropped");
+//     }
+// }
 
 pub fn convert_resolution_to_size(resolution: NUI_IMAGE_RESOLUTION) -> (usize, usize) {
     match resolution {
