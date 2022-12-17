@@ -10,3 +10,4 @@ kinect1 = {path = "../kinect1"}
 anyhow = "1.0.66"
 thiserror = "1.0"
 image = "0.24.5"
+minifb = "0.23"

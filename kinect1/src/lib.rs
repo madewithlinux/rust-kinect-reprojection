@@ -2,10 +2,11 @@ use std::{
     ffi::c_void,
     pin::Pin,
     ptr::{self, null_mut},
+    sync::{mpsc::SendError, Arc},
 };
 
 use hresult_helper::try_get_nui_hresult_name;
-use image::RgbImage;
+use image::{RgbImage, RgbaImage};
 // use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
 use kinect1_sys::{
     INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, NuiImageStreamGetNextFrame, HRESULT, NUI_IMAGE_FRAME,
@@ -48,6 +49,8 @@ pub enum KinectError {
     Hre(HResultError),
     #[error("NuiError({0})")]
     NuiError(String),
+    #[error("SendError({0})")]
+    SendError(#[from] SendError<RgbImage>),
 }
 
 pub type KinectResult<T> = Result<T, KinectError>;
@@ -96,7 +99,7 @@ macro_rules! try_call_method {
                 $self,
                 $($args),+
         ))?;
-        Ok(())
+        KinectResult::Ok(())
         }
     );
 }
@@ -182,7 +185,7 @@ impl Sensor {
         try_call_method!(frame.pFrameTexture, LockRect, 0, &mut locked_rect, null_mut(), 0)?;
         // dbg!(locked_rect);
 
-        let texture_pitch = locked_rect.Pitch as usize;
+        // let texture_pitch = locked_rect.Pitch as usize;
 
         let (width, height) = convert_resolution_to_size(frame.eResolution);
         let bpp = 4;
@@ -242,6 +245,38 @@ fn build_color_rgb_image_buffer(width: usize, height: usize, bgra_data: Vec<u8>)
         rgb_data[i * 3 + 2] = bgra_data[i * 4];
     }
     rgb_data
+}
+
+// TODO: also do depth stream
+fn frame_thread(sender: std::sync::mpsc::Sender<RgbImage>) -> KinectResult<()> {
+    let mut sensor = Sensor::create_sensor_by_index(0)?;
+    dbg!(&sensor);
+    dbg!(sensor.status()?);
+
+    sensor.initialize(NUI_INITIALIZE_FLAG_USES_COLOR | NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX)?;
+
+    let color_stream = sensor.image_stream_open(
+        // NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX,
+        NUI_IMAGE_TYPE_COLOR,
+        NUI_IMAGE_RESOLUTION_640X480,
+        0,
+        2,
+        null_mut(),
+    )?;
+
+    loop {
+        let frame = sensor.get_next_frame(color_stream)?;
+        sender.send(frame)?;
+    }
+}
+
+pub fn start_frame_thread() -> std::sync::mpsc::Receiver<RgbImage> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+
+    // let sensor = Arc::clone(&sensor);
+    std::thread::spawn(move || frame_thread(sender).unwrap());
+
+    receiver
 }
 
 // pub struct ColorFrameData {
