@@ -29,9 +29,11 @@ fn setup_kinect(world: &mut World) {
     world.insert_non_send_resource(Kinect { rgb_receiver: receiver });
 }
 
-fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, _asset_server: Res<AssetServer>) {
+fn spawn_camera(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default()).insert(MainCamera);
+}
 
+fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, _asset_server: Res<AssetServer>) {
     let rgb_image_handle = images.add(Image::new_fill(
         Extent3d {
             width: WIDTH as u32,
@@ -145,9 +147,6 @@ fn update_image_from_rgb_data(rgb_query: Query<&CurrentRgb>, mut images: ResMut<
                     new_pixels.push(r);
                     new_pixels.push(g);
                     new_pixels.push(b);
-                    // new_pixels.push((luma/255) as u8);
-                    // new_pixels.push((luma/255) as u8);
-                    // new_pixels.push((luma/255) as u8);
                     new_pixels.push(255); // alpha
                 }
                 handle.data = new_pixels;
@@ -155,6 +154,68 @@ fn update_image_from_rgb_data(rgb_query: Query<&CurrentRgb>, mut images: ResMut<
         }
         Err(_) => {}
     }
+}
+
+const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
+const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
+const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
+
+fn button_system(
+    mut interaction_query: Query<(&Interaction, &mut BackgroundColor, &Children), (Changed<Interaction>, With<Button>)>,
+    mut text_query: Query<&mut Text>,
+) {
+    for (interaction, mut color, children) in &mut interaction_query {
+        let mut text = text_query.get_mut(children[0]).unwrap();
+        match *interaction {
+            Interaction::Clicked => {
+                text.sections[0].value = "Press".to_string();
+                *color = PRESSED_BUTTON.into();
+                // println!("pressed");
+            }
+            Interaction::Hovered => {
+                text.sections[0].value = "Hover".to_string();
+                *color = HOVERED_BUTTON.into();
+            }
+            Interaction::None => {
+                text.sections[0].value = "Button".to_string();
+                *color = NORMAL_BUTTON.into();
+            }
+        }
+    }
+}
+
+fn spawn_button(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands
+        .spawn(ButtonBundle {
+            style: Style {
+                size: Size::new(Val::Px(150.0), Val::Px(65.0)),
+                // // center button
+                // margin: UiRect::all(Val::Auto),
+                // horizontally center child text
+                justify_content: JustifyContent::Center,
+                // vertically center child text
+                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                position: UiRect {
+                    bottom: Val::Px(0.0),
+                    left: Val::Px(0.0),
+                    ..default()
+                },
+                ..default()
+            },
+            background_color: NORMAL_BUTTON.into(),
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn(TextBundle::from_section(
+                "Button",
+                TextStyle {
+                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                    font_size: 40.0,
+                    color: Color::rgb(0.9, 0.9, 0.9),
+                },
+            ));
+        });
 }
 
 fn keyboard_input(keys: Res<Input<KeyCode>>) {
@@ -170,12 +231,14 @@ fn keyboard_input(keys: Res<Input<KeyCode>>) {
 fn main() -> Result<()> {
     App::new()
         .add_startup_system(setup_kinect)
+        .add_startup_system(spawn_camera)
         .add_startup_system(spawn_rgb)
+        .add_startup_system(spawn_button)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             window: WindowDescriptor {
                 title: "Bevy Kinect".to_string(),
                 width: 640.0 * 2.0,
-                height: 480.0,
+                height: 480.0 + 65.0,
                 ..default()
             },
             ..default()
@@ -183,7 +246,7 @@ fn main() -> Result<()> {
         .add_system(read_rgb_data)
         .add_system(keyboard_input)
         .add_system(update_image_from_rgb_data)
-        // .add_system(move_crosshair_to_pos)
+        .add_system(button_system)
         .run();
 
     Ok(())
