@@ -1,6 +1,8 @@
 use anyhow::Result;
+use bevy::core::FrameCount;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
+use bevy::tasks::AsyncComputeTaskPool;
 use image::{Rgb, RgbImage};
 
 use kinect1::{depth_to_rgb_color, start_frame_thread, Gray16Image, KinectFrameMessage};
@@ -16,6 +18,7 @@ struct Kinect {
 struct CurrentRgb {
     rgb_data: RgbImage,
     depth_data: Gray16Image,
+    // TODO: probably should split these out? and make the raw rgb/depth data a separate resource or something?
     rgb_handle: Handle<Image>,
     depth_handle: Handle<Image>,
 }
@@ -161,16 +164,40 @@ const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
 
 fn button_system(
+    time: Res<Time>,
+    frame_count: Res<FrameCount>,
+    // TODO: can't add this, because then the query won't find the button for some reason
+    rgb_query: Query<&CurrentRgb>,
     mut interaction_query: Query<(&Interaction, &mut BackgroundColor, &Children), (Changed<Interaction>, With<Button>)>,
     mut text_query: Query<&mut Text>,
 ) {
+    let current_rgb = rgb_query.get_single();
+    let thread_pool = AsyncComputeTaskPool::get();
+
     for (interaction, mut color, children) in &mut interaction_query {
         let mut text = text_query.get_mut(children[0]).unwrap();
         match *interaction {
             Interaction::Clicked => {
                 text.sections[0].value = "Press".to_string();
                 *color = PRESSED_BUTTON.into();
+                println!("pressed {}", frame_count.0);
                 // println!("pressed");
+
+                if let Ok(current_rgb) = current_rgb {
+                    let rgb_data = current_rgb.rgb_data.clone();
+                    let depth_data = current_rgb.depth_data.clone();
+                    let i = frame_count.0;
+                    thread_pool
+                        .spawn(async move {
+                            println!("saving frames");
+                            let rgb_filename = format!("kinect_rgb_data_{}.png", i);
+                            rgb_data.save(rgb_filename).unwrap();
+                            let depth_filename = format!("kinect_depth_data_{}.png", i);
+                            depth_data.save(depth_filename).unwrap();
+                            println!("saved frames");
+                        })
+                        .detach();
+                }
             }
             Interaction::Hovered => {
                 text.sections[0].value = "Hover".to_string();
@@ -206,6 +233,12 @@ fn spawn_button(mut commands: Commands, asset_server: Res<AssetServer>) {
             background_color: NORMAL_BUTTON.into(),
             ..default()
         })
+        // .insert(CurrentRgb {
+        //     rgb_data: RgbImage::new(WIDTH as u32, HEIGHT as u32),
+        //     depth_data: Gray16Image::new(WIDTH as u32, HEIGHT as u32),
+        //     rgb_handle: Default::default(),
+        //     depth_handle: Default::default(),
+        // })
         .with_children(|parent| {
             parent.spawn(TextBundle::from_section(
                 "Button",
@@ -234,15 +267,17 @@ fn main() -> Result<()> {
         .add_startup_system(spawn_camera)
         .add_startup_system(spawn_rgb)
         .add_startup_system(spawn_button)
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            window: WindowDescriptor {
-                title: "Bevy Kinect".to_string(),
-                width: 640.0 * 2.0,
-                height: 480.0 + 65.0,
+        .add_plugins(
+            DefaultPlugins.set(WindowPlugin {
+                window: WindowDescriptor {
+                    title: "Bevy Kinect".to_string(),
+                    width: 640.0 * 2.0,
+                    height: 480.0 + 65.0,
+                    ..default()
+                },
                 ..default()
-            },
-            ..default()
-        }))
+            }), // .add(FrameCountPlugin),
+        )
         .add_system(read_rgb_data)
         .add_system(keyboard_input)
         .add_system(update_image_from_rgb_data)
