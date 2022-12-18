@@ -1,17 +1,12 @@
 use std::{
     ffi::c_void,
-    pin::Pin,
     ptr::{self, null_mut},
-    sync::{mpsc::SendError, Arc},
+    sync::mpsc::SendError,
 };
 
-use hresult_helper::try_get_nui_hresult_name;
-use image::{RgbImage, RgbaImage};
+use image::RgbImage;
 // use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
-use kinect1_sys::{
-    INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, NuiImageStreamGetNextFrame, HRESULT, NUI_IMAGE_FRAME,
-    NUI_LOCKED_RECT,
-};
+use kinect1_sys::{INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, HRESULT, NUI_IMAGE_FRAME, NUI_LOCKED_RECT};
 
 pub const NUI_IMAGE_RESOLUTION_1280X960: NUI_IMAGE_RESOLUTION =
     kinect1_sys::_NUI_IMAGE_RESOLUTION_NUI_IMAGE_RESOLUTION_1280x960;
@@ -24,7 +19,7 @@ pub const NUI_IMAGE_RESOLUTION_80X60: NUI_IMAGE_RESOLUTION =
 pub const NUI_IMAGE_RESOLUTION_INVALID: NUI_IMAGE_RESOLUTION =
     kinect1_sys::_NUI_IMAGE_RESOLUTION_NUI_IMAGE_RESOLUTION_INVALID;
 
-use kinect1_sys::{HANDLE, NUI_IMAGE_VIEW_AREA};
+use kinect1_sys::HANDLE;
 pub use kinect1_sys::{
     NUI_IMAGE_RESOLUTION, NUI_IMAGE_TYPE, NUI_INITIALIZE_DEFAULT_HARDWARE_THREAD, NUI_INITIALIZE_FLAG_USES_AUDIO,
     NUI_INITIALIZE_FLAG_USES_COLOR, NUI_INITIALIZE_FLAG_USES_DEPTH, NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX,
