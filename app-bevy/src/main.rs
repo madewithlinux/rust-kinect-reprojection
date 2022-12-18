@@ -1,12 +1,9 @@
-use std::{fs::create_dir_all, path::PathBuf};
-
 use anyhow::Result;
-use array2d::Array2D;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
-
 use image::{Rgb, RgbImage};
-use kinect1::{depth_to_rgb_color, get_sensor_count, start_frame_thread, Gray16Image, KinectFrameMessage};
+
+use kinect1::{depth_to_rgb_color, start_frame_thread, Gray16Image, KinectFrameMessage};
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 480;
@@ -32,7 +29,7 @@ fn setup_kinect(world: &mut World) {
     world.insert_non_send_resource(Kinect { rgb_receiver: receiver });
 }
 
-fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, asset_server: Res<AssetServer>) {
+fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, _asset_server: Res<AssetServer>) {
     commands.spawn(Camera2dBundle::default()).insert(MainCamera);
 
     let rgb_image_handle = images.add(Image::new_fill(
@@ -160,17 +157,13 @@ fn update_image_from_rgb_data(rgb_query: Query<&CurrentRgb>, mut images: ResMut<
     }
 }
 
-fn keyboard_input(keys: Res<Input<KeyCode>>, kinect: NonSend<Kinect>) {
+fn keyboard_input(keys: Res<Input<KeyCode>>) {
     if keys.just_pressed(KeyCode::Down) {
         println!("KeyCode::Down");
-        // let tilt_degree = kinect.device.get_tilt_degree().unwrap();
-        // // kinect.device.set_tilt_degree(tilt_degree - 5.0).unwrap();
     }
 
     if keys.just_pressed(KeyCode::Up) {
         println!("KeyCode::Up");
-        // // let tilt_degree = kinect.device.get_tilt_degree().unwrap();
-        // // kinect.device.set_tilt_degree(tilt_degree + 5.0).unwrap();
     }
 }
 

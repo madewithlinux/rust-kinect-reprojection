@@ -337,21 +337,3 @@ pub fn start_frame_thread() -> std::sync::mpsc::Receiver<KinectFrameMessage> {
 
     receiver
 }
-
-// pub struct ColorFrameData {
-//     width: usize,
-//     height: usize,
-//     data: Vec<u8>,
-// }
-
-// fn bits_per_pixel(image_type: NUI_IMAGE_TYPE) -> usize {
-// match image_type {
-//     NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX
-//     NUI_IMAGE_TYPE_COLOR
-//     NUI_IMAGE_TYPE_COLOR_YUV
-//     NUI_IMAGE_TYPE_COLOR_RAW_YUV
-//     NUI_IMAGE_TYPE_DEPTH
-//     NUI_IMAGE_TYPE_COLOR_INFRARED
-//     NUI_IMAGE_TYPE_COLOR_RAW_BAYER
-// }
-// }

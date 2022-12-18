@@ -46,6 +46,6 @@ pub fn try_get_nui_hresult_name(result: HRESULT) -> Option<String> {
         E_NUI_DATABASE_NOT_FOUND => Some("E_NUI_DATABASE_NOT_FOUND".to_string()),
         E_NUI_DATABASE_VERSION_MISMATCH => Some("E_NUI_DATABASE_VERSION_MISMATCH".to_string()),
         E_NUI_HARDWARE_FEATURE_UNAVAILABLE => Some("E_NUI_HARDWARE_FEATURE_UNAVAILABLE".to_string()),
-        other => None,
+        _ => None,
     }
 }
