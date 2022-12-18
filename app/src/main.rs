@@ -39,6 +39,7 @@ fn main() -> Result<()> {
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // TODO: handle hangup case?
         if let Ok(frame) = receiver.try_recv() {
+            let frame = frame.color_frame;
             assert_eq!(frame.len() / 3, buffer.len());
             for (i, pixel) in frame.pixels().enumerate() {
                 buffer[i] = (pixel.0[0] as u32) << 16 | (pixel.0[1] as u32) << 8 | (pixel.0[2] as u32);

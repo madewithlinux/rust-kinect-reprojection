@@ -5,20 +5,22 @@ use array2d::Array2D;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
 
-use image::RgbImage;
-use kinect1::{get_sensor_count, start_frame_thread};
+use image::{Rgb, RgbImage};
+use kinect1::{depth_to_rgb_color, get_sensor_count, start_frame_thread, Gray16Image, KinectFrameMessage};
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 480;
 
 struct Kinect {
-    rgb_receiver: std::sync::mpsc::Receiver<RgbImage>,
+    rgb_receiver: std::sync::mpsc::Receiver<KinectFrameMessage>,
 }
 
 #[derive(Component)]
 struct CurrentRgb {
     rgb_data: RgbImage,
-    handle: Handle<Image>,
+    depth_data: Gray16Image,
+    rgb_handle: Handle<Image>,
+    depth_handle: Handle<Image>,
 }
 
 #[derive(Component)]
@@ -33,7 +35,7 @@ fn setup_kinect(world: &mut World) {
 fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2dBundle::default()).insert(MainCamera);
 
-    let image_handle = images.add(Image::new_fill(
+    let rgb_image_handle = images.add(Image::new_fill(
         Extent3d {
             width: WIDTH as u32,
             height: HEIGHT as u32,
@@ -43,10 +45,22 @@ fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, asset_se
         &[0, 0, 0, 255],
         TextureFormat::Rgba8UnormSrgb,
     ));
+    let depth_image_handle = images.add(Image::new_fill(
+        Extent3d {
+            width: WIDTH as u32,
+            height: HEIGHT as u32,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        &[0, 0, 0, 255],
+        TextureFormat::Rgba8Unorm,
+    ));
 
     commands.spawn_empty().insert(CurrentRgb {
         rgb_data: RgbImage::new(WIDTH as u32, HEIGHT as u32),
-        handle: image_handle.clone(),
+        depth_data: Gray16Image::new(WIDTH as u32, HEIGHT as u32),
+        rgb_handle: rgb_image_handle.clone(),
+        depth_handle: depth_image_handle.clone(),
     });
 
     commands
@@ -77,7 +91,15 @@ fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, asset_se
                             size: Size::new(Val::Px(640.0), Val::Px(480.0)),
                             ..default()
                         },
-                        image: UiImage(image_handle),
+                        image: UiImage(rgb_image_handle),
+                        ..default()
+                    });
+                    parent.spawn(ImageBundle {
+                        style: Style {
+                            size: Size::new(Val::Px(640.0), Val::Px(480.0)),
+                            ..default()
+                        },
+                        image: UiImage(depth_image_handle),
                         ..default()
                     });
                 });
@@ -89,8 +111,9 @@ fn read_rgb_data(kinect: NonSend<Kinect>, mut rgb_query: Query<&mut CurrentRgb>)
 
     match rgb_res {
         Ok(mut rgb) => {
-            if let Ok(rgb_data) = kinect.rgb_receiver.try_recv() {
-                rgb.rgb_data = rgb_data;
+            if let Ok(frame) = kinect.rgb_receiver.try_recv() {
+                rgb.rgb_data = frame.color_frame;
+                rgb.depth_data = frame.depth_frame;
                 return;
             } else {
                 return;
@@ -108,22 +131,28 @@ fn update_image_from_rgb_data(rgb_query: Query<&CurrentRgb>, mut images: ResMut<
             if rgb.rgb_data.len() == 0 {
                 return;
             }
-            if let Some(mut handle) = images.get_mut(&rgb.handle) {
+            if let Some(mut handle) = images.get_mut(&rgb.rgb_handle) {
                 let mut new_pixels: Vec<u8> = Vec::with_capacity(WIDTH * HEIGHT * 4);
-
-                // for [r,g,b] in rgb.rgb_data.chunks(3) {
                 for pixel in rgb.rgb_data.pixels() {
                     new_pixels.push(pixel.0[0]);
                     new_pixels.push(pixel.0[1]);
                     new_pixels.push(pixel.0[2]);
                     new_pixels.push(255); // alpha
-
-                    // new_pixels.push(0);
-                    // new_pixels.push(0);
-                    // new_pixels.push(0);
-                    // new_pixels.push((measurement / 8) as u8);
                 }
-
+                handle.data = new_pixels;
+            }
+            if let Some(mut handle) = images.get_mut(&rgb.depth_handle) {
+                let mut new_pixels: Vec<u8> = Vec::with_capacity(WIDTH * HEIGHT * 4);
+                for &depth in rgb.depth_data.iter() {
+                    let Rgb([r, g, b]) = depth_to_rgb_color(depth);
+                    new_pixels.push(r);
+                    new_pixels.push(g);
+                    new_pixels.push(b);
+                    // new_pixels.push((luma/255) as u8);
+                    // new_pixels.push((luma/255) as u8);
+                    // new_pixels.push((luma/255) as u8);
+                    new_pixels.push(255); // alpha
+                }
                 handle.data = new_pixels;
             }
         }
@@ -152,8 +181,8 @@ fn main() -> Result<()> {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             window: WindowDescriptor {
                 title: "Bevy Kinect".to_string(),
-                width: 640.,
-                height: 480.,
+                width: 640.0 * 2.0,
+                height: 480.0,
                 ..default()
             },
             ..default()
