@@ -322,7 +322,7 @@ fn frame_thread(sender: std::sync::mpsc::Sender<KinectFrameMessage>) -> KinectRe
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct KinectFrameMessage {
     pub color_frame: RgbImage,
     pub depth_frame: Gray16Image,
