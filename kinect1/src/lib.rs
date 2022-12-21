@@ -5,7 +5,9 @@ use std::{
 };
 
 pub type Gray16Image = ImageBuffer<Luma<u16>, Vec<u16>>;
-use image::{ImageBuffer, Luma, Rgb, RgbImage};
+pub use image::{Rgb, RgbImage};
+
+use image::{ImageBuffer, Luma};
 // use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
 use kinect1_sys::{
     INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, HANDLE, HRESULT, NUI_IMAGE_FRAME,

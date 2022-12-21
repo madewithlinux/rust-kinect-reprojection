@@ -1,11 +1,13 @@
+use std::collections::VecDeque;
+
 use anyhow::Result;
 use bevy::core::FrameCount;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
 use bevy::tasks::AsyncComputeTaskPool;
-use image::Rgb;
+use image::{Rgb, RgbImage};
 
-use kinect1::{depth_to_rgb_color, start_frame_thread, KinectFrameMessage};
+use kinect1::{depth_to_rgb_color, start_frame_thread, Gray16Image, KinectFrameMessage, NUI_IMAGE_DEPTH_NO_VALUE};
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 480;
@@ -15,6 +17,15 @@ struct KinectReceiver(std::sync::mpsc::Receiver<KinectFrameMessage>);
 
 #[derive(Component, Default)]
 struct KinectCurrentFrame(KinectFrameMessage);
+
+#[derive(Component, Default)]
+struct KinectDerivedFrame(KinectFrameMessage);
+
+#[derive(Component, Default)]
+struct KinectFrameHistoryBuffer {
+    pub buffer_size: usize,
+    pub history: VecDeque<KinectFrameMessage>,
+}
 
 #[derive(Component)]
 struct KinectColorImageHandle(Handle<Image>);
@@ -28,7 +39,14 @@ struct MainCamera;
 fn setup_kinect(world: &mut World) {
     let receiver = start_frame_thread();
     world.insert_non_send_resource(KinectReceiver(receiver));
-    world.spawn(KinectCurrentFrame::default());
+    world.spawn((
+        KinectCurrentFrame::default(),
+        KinectFrameHistoryBuffer {
+            buffer_size: 2,
+            history: VecDeque::with_capacity(2),
+        },
+        KinectDerivedFrame::default(),
+    ));
 }
 
 fn spawn_camera(mut commands: Commands) {
@@ -104,11 +122,30 @@ fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, _asset_s
 
 fn receive_kinect_current_frame(
     receiver: NonSend<KinectReceiver>,
-    mut current_frame_query: Query<&mut KinectCurrentFrame>,
+    mut current_frame_query: Query<(
+        &mut KinectCurrentFrame,
+        &mut KinectFrameHistoryBuffer,
+        &mut KinectDerivedFrame,
+    )>,
 ) {
     if let Ok(received_frame) = receiver.0.try_recv() {
-        let mut current_frame = current_frame_query.single_mut();
-        current_frame.0 = received_frame;
+        let (mut current_frame, mut history_buf, mut derived_frame) = current_frame_query.single_mut();
+        current_frame.0 = received_frame.clone();
+        derived_frame.0 = received_frame.clone();
+        for historic_frame in history_buf.history.iter() {
+            for (i, depth) in historic_frame.depth_frame.iter().enumerate() {
+                if depth == &NUI_IMAGE_DEPTH_NO_VALUE {
+                    continue;
+                }
+                if derived_frame.0.depth_frame.get(i) == Some(&NUI_IMAGE_DEPTH_NO_VALUE) {
+                    *derived_frame.0.depth_frame.get_mut(i).unwrap() = *depth;
+                }
+            }
+        }
+        if history_buf.history.len() >= history_buf.buffer_size {
+            history_buf.history.pop_back();
+        }
+        history_buf.history.push_front(received_frame.clone());
     }
 }
 
@@ -138,7 +175,8 @@ fn update_color_image(
 }
 
 fn update_depth_image(
-    current_frame: Query<&KinectCurrentFrame>,
+    // current_frame: Query<&KinectCurrentFrame>,
+    current_frame: Query<&KinectDerivedFrame>,
     handle_query: Query<&KinectDepthImageHandle>,
     mut images: ResMut<Assets<Image>>,
 ) {
