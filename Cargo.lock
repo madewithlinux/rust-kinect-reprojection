@@ -479,6 +479,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_framepace"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5ae983870b93cdc5bc3484dd6928d7c3217e4a31ccbe4dfb0680dc00c06b47f"
+dependencies = [
+ "bevy",
+ "wasm_thread",
+]
+
+[[package]]
 name = "bevy_gilrs"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1485,6 +1495,24 @@ dependencies = [
  "ahash 0.8.2",
  "epaint",
  "nohash-hasher",
+]
+
+[[package]]
+name = "egui-gizmo"
+version = "0.8.2"
+source = "git+https://github.com/matthiascy/egui-gizmo?rev=516dc8453bb6423d8cf050af172e854611a8a1d9#516dc8453bb6423d8cf050af172e854611a8a1d9"
+dependencies = [
+ "egui",
+ "glam",
+]
+
+[[package]]
+name = "egui_dock"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77bb3bc3ce46356c466e04fea06d8110bf2d78b0ca7f98c4c404b2c7b502f392"
+dependencies = [
+ "egui",
 ]
 
 [[package]]
@@ -3262,8 +3290,14 @@ dependencies = [
  "array2d",
  "bevy",
  "bevy-inspector-egui",
+ "bevy_asset",
  "bevy_egui",
+ "bevy_framepace",
+ "bevy_reflect",
+ "bevy_render",
  "egui",
+ "egui-gizmo",
+ "egui_dock",
  "image 0.24.5",
  "kinect1",
  "thiserror",
@@ -3919,6 +3953,19 @@ name = "wasm-bindgen-shared"
 version = "0.2.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
+
+[[package]]
+name = "wasm_thread"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a52fc987e67957cab58160d1ea273a2886972ef6f59c7fa0c02e9fe2c8e11706"
+dependencies = [
+ "async-channel",
+ "futures",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
 
 [[package]]
 name = "wayland-client"

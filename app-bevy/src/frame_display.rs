@@ -2,20 +2,50 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
 use kinect1::depth_to_rgb_color;
 
+use crate::dock_ui::MainCamera;
 use crate::receiver::{KinectCurrentFrame, KinectDerivedFrame};
-use crate::{DEPTH_HEIGHT, DEPTH_WIDTH, RGB_HEIGHT, RGB_WIDTH};
+use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
 
 #[derive(Component, Reflect)]
 pub struct KinectColorImageHandle(pub Handle<Image>);
-
 #[derive(Component, Reflect)]
 pub struct KinectDepthImageHandle(pub Handle<Image>);
+
+#[derive(Component, Reflect)]
+pub struct ColorImageSprite;
+#[derive(Component, Reflect)]
+pub struct DepthImageSprite;
+
+fn update_sprite_transforms(
+    cameras: Query<&mut Camera, With<MainCamera>>,
+    mut color_transform: Query<&mut Transform, (With<ColorImageSprite>, Without<DepthImageSprite>)>,
+    mut depth_transform: Query<&mut Transform, (With<DepthImageSprite>, Without<ColorImageSprite>)>,
+    windows: Res<Windows>,
+) {
+    let window = windows.primary();
+    let scale_factor = window.scale_factor() as f32;
+
+    let cam = cameras.single();
+    let physical_size = match &cam.viewport {
+        Some(vp) => vp.physical_size,
+        None => return,
+    };
+    let viewport_width = (physical_size.x as f32) / scale_factor;
+    // let viewport_height = (physical_size.y as f32) / scale_factor;
+
+    let mut color_transform = color_transform.single_mut();
+    let mut depth_transform = depth_transform.single_mut();
+    *color_transform = Transform::from_scale(Vec3::splat(viewport_width / (COLOR_WIDTH as f32) / 2.0))
+        .with_translation(Vec3::new(-viewport_width / 4.0, 0.0, 0.0));
+    *depth_transform = Transform::from_scale(Vec3::splat(viewport_width / (DEPTH_WIDTH as f32) / 2.0))
+        .with_translation(Vec3::new(viewport_width / 4.0, 0.0, 0.0));
+}
 
 fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>>, _asset_server: Res<AssetServer>) {
     let color_image_handle = images.add(Image::new_fill(
         Extent3d {
-            width: RGB_WIDTH as u32,
-            height: RGB_HEIGHT as u32,
+            width: COLOR_WIDTH as u32,
+            height: COLOR_HEIGHT as u32,
             depth_or_array_layers: 1,
         },
         bevy::render::render_resource::TextureDimension::D2,
@@ -42,49 +72,33 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
         KinectDepthImageHandle(depth_image_handle.clone()),
     ));
 
-    commands
-        .spawn((
-            Name::new("UI"),
-            NodeBundle {
-                style: Style {
-                    size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                    justify_content: JustifyContent::SpaceBetween,
-                    ..default()
-                },
-                ..default()
-            },
-        ))
-        .with_children(|parent| {
-            parent
-                .spawn(NodeBundle {
-                    style: Style {
-                        size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                        position_type: PositionType::Absolute,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::FlexStart,
-                        ..default()
-                    },
-                    ..default()
-                })
-                .with_children(|parent| {
-                    parent.spawn(ImageBundle {
-                        style: Style {
-                            size: Size::new(Val::Px(640.0), Val::Px(480.0)),
-                            ..default()
-                        },
-                        image: UiImage(color_image_handle),
-                        ..default()
-                    });
-                    parent.spawn(ImageBundle {
-                        style: Style {
-                            size: Size::new(Val::Px(640.0), Val::Px(480.0)),
-                            ..default()
-                        },
-                        image: UiImage(depth_image_handle),
-                        ..default()
-                    });
-                });
-        });
+    commands.spawn((
+        SpriteBundle {
+            texture: color_image_handle,
+            transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(
+                Vec3::splat(0.5),
+                Quat::default(),
+                Vec3::new(-0.5, 0.0, 0.0),
+            )),
+            ..default()
+        },
+        Name::new("color image"),
+        ColorImageSprite,
+    ));
+
+    commands.spawn((
+        SpriteBundle {
+            texture: depth_image_handle,
+            transform: Transform::from_matrix(Mat4::from_scale_rotation_translation(
+                Vec3::splat(0.5),
+                Quat::default(),
+                Vec3::new(0.5, 0.0, 0.0),
+            )),
+            ..default()
+        },
+        Name::new("depth image"),
+        DepthImageSprite,
+    ));
 }
 
 fn update_color_image(
@@ -97,7 +111,7 @@ fn update_color_image(
         return;
     }
 
-    let mut color_pixels: Vec<u8> = Vec::with_capacity(RGB_WIDTH * RGB_HEIGHT * 4);
+    let mut color_pixels: Vec<u8> = Vec::with_capacity(COLOR_WIDTH * COLOR_HEIGHT * 4);
     for pixel in current_frame.0.color_frame.pixels() {
         color_pixels.push(pixel.0[0]);
         color_pixels.push(pixel.0[1]);
@@ -145,6 +159,7 @@ impl Plugin for FrameDisplayPlugin {
         app.add_startup_system(setup_display_frames)
             .add_system(update_color_image)
             .add_system(update_depth_image)
+            .add_system(update_sprite_transforms)
             .register_type::<KinectColorImageHandle>()
             .register_type::<KinectDepthImageHandle>();
     }

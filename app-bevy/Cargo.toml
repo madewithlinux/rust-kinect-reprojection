@@ -14,6 +14,13 @@ array2d = "0.3"
 
 # bevy = "0.9"
 bevy = { version = "0.9", features = ["dynamic"] }
+bevy_reflect = { version = "0.9" }
+bevy_asset = { version = "0.9" }
+bevy_render = { version = "0.9" }
+bevy_framepace = "0.9"
+
 bevy-inspector-egui = "0.16.0-pre.2"
 egui = "0.20.0"
 bevy_egui = "0.18"
+egui_dock = "0.3"
+egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo", rev = "516dc8453bb6423d8cf050af172e854611a8a1d9" }
