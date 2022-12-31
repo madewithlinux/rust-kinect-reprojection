@@ -10,8 +10,7 @@ pub use image::{Rgb, RgbImage};
 use image::{ImageBuffer, Luma};
 // use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
 use kinect1_sys::{
-    INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, HANDLE, HRESULT, NUI_IMAGE_FRAME,
-    NUI_IMAGE_PLAYER_INDEX_SHIFT, NUI_LOCKED_RECT,
+    INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, HANDLE, HRESULT, NUI_IMAGE_FRAME, NUI_LOCKED_RECT,
 };
 
 pub const NUI_IMAGE_RESOLUTION_1280X960: NUI_IMAGE_RESOLUTION =
