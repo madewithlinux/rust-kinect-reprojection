@@ -92,8 +92,10 @@ impl UiState {
     pub fn new() -> Self {
         let mut tree = Tree::new(vec![Window::GameView]);
         let [game, _inspector] = tree.split_right(NodeIndex::root(), 0.75, vec![Window::Inspector]);
-        let [game, _hierarchy] = tree.split_left(game, 0.2, vec![Window::Hierarchy]);
-        let [_game, _bottom] = tree.split_below(game, 0.8, vec![Window::Resources, Window::Assets]);
+        let [game, _hierarchy] =
+            tree.split_left(game, 0.2, vec![Window::Hierarchy, Window::World, Window::WorldEntities]);
+        let [_game, bottom] = tree.split_below(game, 0.8, vec![Window::Resources, Window::Assets]);
+        let [_bottom, _bottom_controls] = tree.split_right(bottom, 0.8, vec![Window::Controls]);
 
         Self {
             tree,
@@ -118,11 +120,14 @@ impl UiState {
 
 #[derive(Debug)]
 enum Window {
+    World,
+    WorldEntities,
     GameView,
     Hierarchy,
     Resources,
     Assets,
     Inspector,
+    Controls,
 }
 
 struct TabViewer<'a> {
@@ -141,6 +146,8 @@ impl egui_dock::TabViewer for TabViewer<'_> {
         let type_registry = type_registry.read();
 
         match window {
+            Window::World => bevy_inspector::ui_for_world(self.world, ui),
+            Window::WorldEntities => bevy_inspector::ui_for_world_entities(self.world, ui),
             Window::GameView => {
                 (*self.viewport_rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
 
@@ -163,6 +170,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                     bevy_inspector::by_type_id::ui_for_asset(self.world, type_id, handle, ui, &type_registry);
                 }
             },
+            Window::Controls => ui_controls(ui, self.world),
         }
     }
 
@@ -173,6 +181,35 @@ impl egui_dock::TabViewer for TabViewer<'_> {
     fn clear_background(&self, window: &Self::Tab) -> bool {
         !matches!(window, Window::GameView)
     }
+}
+
+fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
+    let pool = bevy::tasks::AsyncComputeTaskPool::get();
+
+    ui.vertical(|ui| {
+        if ui.button("save depth frame").clicked() {
+            let depth_frame = world
+                .query::<&crate::receiver::KinectDerivedFrame>()
+                .single(world)
+                .0
+                .depth_frame
+                .clone();
+            pool.spawn(async move {
+                info!("saving depth frame");
+                let Some(depth_filename) = rfd::FileDialog::new()
+                    .add_filter("png", &["png", "PNG"])
+                    .set_title("save depth frame")
+                    .set_file_name("kinect_depth_data.png")
+                    .save_file() else {
+                        info!("file chooser cancelled");
+                        return
+                    };
+                depth_frame.save(&depth_filename).unwrap();
+                info!("saved {:?}", &depth_filename);
+            })
+            .detach();
+        }
+    });
 }
 
 // TODO: remove all the gizmo stuff from here?

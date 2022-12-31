@@ -24,3 +24,4 @@ egui = "0.20.0"
 bevy_egui = "0.18"
 egui_dock = "0.3"
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo", rev = "516dc8453bb6423d8cf050af172e854611a8a1d9" }
+rfd = "0.10.0"
