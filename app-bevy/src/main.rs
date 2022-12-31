@@ -1,11 +1,16 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
+use image::{Rgb, RgbImage};
+
 use bevy::core::FrameCount;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
 use bevy::tasks::AsyncComputeTaskPool;
-use image::{Rgb, RgbImage};
+// use bevy_inspector_egui::{prelude::*, DefaultInspectorConfigPlugin};
+// use bevy_egui::EguiPlugin;
+use bevy_inspector_egui::prelude::*;
+use std::any::TypeId;
 
 use kinect1::{depth_to_rgb_color, start_frame_thread, Gray16Image, KinectFrameMessage, NUI_IMAGE_DEPTH_NO_VALUE};
 
@@ -21,28 +26,32 @@ struct KinectCurrentFrame(KinectFrameMessage);
 #[derive(Component, Default)]
 struct KinectDerivedFrame(KinectFrameMessage);
 
+#[derive(Component, Default, Debug, Reflect)]
+struct KinectFrameHistorySize {
+    pub buffer_size: usize,
+}
 #[derive(Component, Default)]
 struct KinectFrameHistoryBuffer {
-    pub buffer_size: usize,
     pub history: VecDeque<KinectFrameMessage>,
 }
 
-#[derive(Component)]
+#[derive(Component, Reflect)]
 struct KinectColorImageHandle(Handle<Image>);
 
-#[derive(Component)]
+#[derive(Component, Reflect)]
 struct KinectDepthImageHandle(Handle<Image>);
 
-#[derive(Component)]
+#[derive(Component, Reflect)]
 struct MainCamera;
 
 fn setup_kinect(world: &mut World) {
     let receiver = start_frame_thread();
     world.insert_non_send_resource(KinectReceiver(receiver));
     world.spawn((
+        Name::new("frame and buffer"),
         KinectCurrentFrame::default(),
+        KinectFrameHistorySize { buffer_size: 2 },
         KinectFrameHistoryBuffer {
-            buffer_size: 2,
             history: VecDeque::with_capacity(2),
         },
         KinectDerivedFrame::default(),
@@ -75,18 +84,27 @@ fn spawn_rgb(mut commands: Commands, mut images: ResMut<Assets<Image>>, _asset_s
         TextureFormat::Rgba8Unorm,
     ));
 
-    commands.spawn(KinectColorImageHandle(color_image_handle.clone()));
-    commands.spawn(KinectDepthImageHandle(depth_image_handle.clone()));
+    commands.spawn((
+        Name::new("color image handle"),
+        KinectColorImageHandle(color_image_handle.clone()),
+    ));
+    commands.spawn((
+        Name::new("depth image handle"),
+        KinectDepthImageHandle(depth_image_handle.clone()),
+    ));
 
     commands
-        .spawn(NodeBundle {
-            style: Style {
-                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                justify_content: JustifyContent::SpaceBetween,
+        .spawn((
+            Name::new("UI"),
+            NodeBundle {
+                style: Style {
+                    size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                    justify_content: JustifyContent::SpaceBetween,
+                    ..default()
+                },
                 ..default()
             },
-            ..default()
-        })
+        ))
         .with_children(|parent| {
             parent
                 .spawn(NodeBundle {
@@ -124,12 +142,14 @@ fn receive_kinect_current_frame(
     receiver: NonSend<KinectReceiver>,
     mut current_frame_query: Query<(
         &mut KinectCurrentFrame,
+        &KinectFrameHistorySize,
         &mut KinectFrameHistoryBuffer,
         &mut KinectDerivedFrame,
     )>,
 ) {
     if let Ok(received_frame) = receiver.0.try_recv() {
-        let (mut current_frame, mut history_buf, mut derived_frame) = current_frame_query.single_mut();
+        let (mut current_frame, history_size, mut history_buf, mut derived_frame) = current_frame_query.single_mut();
+        // info!("history_size={:?}", history_size);
         current_frame.0 = received_frame.clone();
         derived_frame.0 = received_frame.clone();
         for historic_frame in history_buf.history.iter() {
@@ -142,7 +162,7 @@ fn receive_kinect_current_frame(
                 }
             }
         }
-        if history_buf.history.len() >= history_buf.buffer_size {
+        while history_buf.history.len() > history_size.buffer_size {
             history_buf.history.pop_back();
         }
         history_buf.history.push_front(received_frame.clone());
@@ -296,10 +316,6 @@ fn keyboard_input(keys: Res<Input<KeyCode>>) {
 
 fn main() -> Result<()> {
     App::new()
-        .add_startup_system(setup_kinect)
-        .add_startup_system(spawn_camera)
-        .add_startup_system(spawn_rgb)
-        .add_startup_system(spawn_button)
         .add_plugins(
             DefaultPlugins.set(WindowPlugin {
                 window: WindowDescriptor {
@@ -311,11 +327,25 @@ fn main() -> Result<()> {
                 ..default()
             }), // .add(FrameCountPlugin),
         )
+        .add_plugin(bevy_egui::EguiPlugin)
+        // .add_plugin(bevy_inspector_egui::DefaultInspectorConfigPlugin) // adds default options and `InspectorEguiImpl`s
+        .add_plugin(bevy_inspector_egui::quick::WorldInspectorPlugin) // adds default options and `InspectorEguiImpl`s
+        // startup systems
+        .add_startup_system(setup_kinect)
+        .add_startup_system(spawn_camera)
+        .add_startup_system(spawn_rgb)
+        .add_startup_system(spawn_button)
+        // other systems
         .add_system(receive_kinect_current_frame)
         .add_system(keyboard_input)
         .add_system(update_color_image)
         .add_system(update_depth_image)
         .add_system(button_system)
+        // types
+        .register_type::<KinectFrameHistorySize>()
+        .register_type::<KinectColorImageHandle>()
+        .register_type::<KinectDepthImageHandle>()
+        .register_type::<MainCamera>()
         .run();
 
     Ok(())
