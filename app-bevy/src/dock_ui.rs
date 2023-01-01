@@ -10,6 +10,8 @@ use bevy_render::camera::{CameraProjection, Viewport};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
 
+use crate::receiver::DepthBaselineFrame;
+
 pub struct AppUiDockPlugin;
 impl Plugin for AppUiDockPlugin {
     fn build(&self, app: &mut App) {
@@ -208,6 +210,18 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
                 info!("saved {:?}", &depth_filename);
             })
             .detach();
+        }
+
+        if ui.button("open depth baseline image").clicked() {
+            if let Some(depth_filename) = rfd::FileDialog::new()
+                .add_filter("png", &["png", "PNG"])
+                .set_title("open depth baseline image")
+                .set_file_name("kinect_depth_data_empty.png")
+                .pick_file()
+            {
+                world.query::<&mut DepthBaselineFrame>().single_mut(world).0 =
+                    DepthBaselineFrame::load_from(depth_filename).0;
+            }
         }
     });
 }

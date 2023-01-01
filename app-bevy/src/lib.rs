@@ -17,7 +17,7 @@ pub fn app_main() {
             window: WindowDescriptor {
                 title: "Kinect Reprojection".to_string(),
                 width: (COLOR_WIDTH as f32) * 2.0,
-                height: (COLOR_HEIGHT as f32) + 65.0,
+                height: (COLOR_HEIGHT as f32) + 400.0,
                 ..default()
             },
             ..default()
