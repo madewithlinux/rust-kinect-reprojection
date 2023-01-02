@@ -6,10 +6,9 @@ use std::{
 };
 
 pub type Gray16Image = ImageBuffer<Luma<u16>, Vec<u16>>;
+use image::{ImageBuffer, Luma};
 pub use image::{Rgb, RgbImage};
 
-use image::{ImageBuffer, Luma};
-// use kinect1_sys::{INuiSensor, HRESULT, c_NuiCreateSensorByIndex, c_NuiGetSensorCount};
 use kinect1_sys::{
     INuiCoordinateMapper, INuiSensor, NuiCreateSensorByIndex, NuiDepthPixelToDepth, NuiDepthPixelToPlayerIndex,
     NuiGetSensorCount, HANDLE, HRESULT, NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME,
@@ -36,11 +35,6 @@ pub const NUI_IMAGE_TYPE_DEPTH: NUI_IMAGE_TYPE = kinect1_sys::_NUI_IMAGE_TYPE_NU
 pub const NUI_IMAGE_TYPE_COLOR_INFRARED: NUI_IMAGE_TYPE = kinect1_sys::_NUI_IMAGE_TYPE_NUI_IMAGE_TYPE_COLOR_INFRARED;
 pub const NUI_IMAGE_TYPE_COLOR_RAW_BAYER: NUI_IMAGE_TYPE = kinect1_sys::_NUI_IMAGE_TYPE_NUI_IMAGE_TYPE_COLOR_RAW_BAYER;
 
-// pub use kinect1_sys::{
-//     NUI_DEPTH_DEPTH_UNKNOWN_VALUE, NUI_IMAGE_DEPTH_MAXIMUM, NUI_IMAGE_DEPTH_MAXIMUM_NEAR_MODE, NUI_IMAGE_DEPTH_MINIMUM,
-//     NUI_IMAGE_DEPTH_MINIMUM_NEAR_MODE, NUI_IMAGE_DEPTH_NO_VALUE, NUI_IMAGE_DEPTH_TOO_FAR_VALUE,
-//     NUI_IMAGE_DEPTH_UNKNOWN_VALUE,
-// };
 pub const NUI_IMAGE_DEPTH_MAXIMUM: u16 = kinect1_sys::NUI_IMAGE_DEPTH_MAXIMUM as u16;
 pub const NUI_IMAGE_DEPTH_MINIMUM: u16 = kinect1_sys::NUI_IMAGE_DEPTH_MINIMUM as u16;
 pub const NUI_IMAGE_DEPTH_MAXIMUM_NEAR_MODE: u16 = kinect1_sys::NUI_IMAGE_DEPTH_MAXIMUM_NEAR_MODE as u16;
@@ -417,7 +411,7 @@ pub fn depth_to_rgb_color(depth: u16) -> Rgb<u8> {
     }
 }
 
-fn frame_thread(sender: std::sync::mpsc::Sender<KinectFrameMessage>) -> KinectResult<()> {
+fn frame_thread(sender: FrameMessageSender) -> KinectResult<()> {
     let mut sensor = Sensor::create_sensor_by_index(0)?;
     dbg!(&sensor);
     dbg!(sensor.status()?);
@@ -496,8 +490,11 @@ pub struct KinectFrameMessage {
     pub depth_frame_info: ImageFrameInfo,
 }
 
-pub fn start_frame_thread() -> std::sync::mpsc::Receiver<KinectFrameMessage> {
-    let (sender, receiver) = std::sync::mpsc::channel();
+type FrameMessageSender = crossbeam::channel::Sender<KinectFrameMessage>;
+pub type FrameMessageReceiver = crossbeam::channel::Receiver<KinectFrameMessage>;
+
+pub fn start_frame_thread() -> FrameMessageReceiver {
+    let (sender, receiver) = crossbeam::channel::bounded(2);
     std::thread::spawn(move || frame_thread(sender).unwrap());
     receiver
 }

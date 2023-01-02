@@ -150,31 +150,6 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
 }
 
-fn update_color_image(
-    current_frame: Query<&KinectCurrentFrame>,
-    handle_query: Query<&KinectColorImageHandle>,
-    mut images: ResMut<Assets<Image>>,
-) {
-    let current_frame = current_frame.single();
-    if current_frame.0.color_frame.len() == 0 {
-        return;
-    }
-
-    let mut color_pixels: Vec<u8> = Vec::with_capacity(COLOR_WIDTH * COLOR_HEIGHT * 4);
-    for pixel in current_frame.0.color_frame.pixels() {
-        color_pixels.push(pixel.0[0]);
-        color_pixels.push(pixel.0[1]);
-        color_pixels.push(pixel.0[2]);
-        color_pixels.push(255); // alpha
-    }
-
-    for color_handle in handle_query.iter() {
-        if let Some(mut handle) = images.get_mut(&color_handle.0) {
-            handle.data = color_pixels.clone();
-        }
-    }
-}
-
 fn update_color_image2(
     current_frame: Query<&KinectCurrentFrame>,
     derived_frame: Query<&KinectDerivedFrame>,

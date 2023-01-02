@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 
 use image::{Rgb, RgbImage};
-use kinect1::{start_frame_thread, Gray16Image, KinectFrameMessage, NUI_IMAGE_DEPTH_NO_VALUE};
+use kinect1::{start_frame_thread, FrameMessageReceiver, Gray16Image, KinectFrameMessage, NUI_IMAGE_DEPTH_NO_VALUE};
 
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
 
 #[derive(Debug)]
-pub struct KinectReceiver(pub std::sync::mpsc::Receiver<KinectFrameMessage>);
+pub struct KinectReceiver(pub FrameMessageReceiver);
 
 #[derive(Component)]
 pub struct KinectCurrentFrame(pub KinectFrameMessage);
@@ -65,7 +65,6 @@ pub struct ActiveDepth(pub Gray16Image);
 #[derive(Component)]
 pub struct ActiveColor(pub RgbImage);
 
-// kinect_depth_data_empty.png
 impl DepthBaselineFrame {
     pub fn load_from(path: impl AsRef<std::path::Path>) -> Self {
         Self(image::open(path).unwrap().into_luma16())
@@ -128,7 +127,6 @@ fn setup_kinect_receiver(world: &mut World) {
             history: std::collections::VecDeque::with_capacity(2),
         },
         KinectDerivedFrame::default(),
-        // DepthBaselineFrame::default(),
         DepthBaselineFrame::load_from("kinect_depth_data_empty.png"),
         DepthThreshold(5.0),
         ActiveDepth::default(),

@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::{fs::create_dir_all, path::PathBuf};
 
 use minifb::{Key, Window, WindowOptions};
 
