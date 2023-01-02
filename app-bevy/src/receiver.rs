@@ -152,6 +152,7 @@ impl Default for KinectCurrentFrame {
         Self(KinectFrameMessage {
             color_frame: RgbImage::new(COLOR_WIDTH as u32, COLOR_HEIGHT as u32),
             depth_frame: Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32),
+            ..Default::default()
         })
     }
 }
@@ -160,6 +161,7 @@ impl Default for KinectDerivedFrame {
         Self(KinectFrameMessage {
             color_frame: RgbImage::new(COLOR_WIDTH as u32, COLOR_HEIGHT as u32),
             depth_frame: Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32),
+            ..Default::default()
         })
     }
 }
