@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use image::{GenericImageView, Luma, Rgb, RgbImage};
+use image::{Rgb, RgbImage};
 use kinect1::{start_frame_thread, Gray16Image, KinectFrameMessage, NUI_IMAGE_DEPTH_NO_VALUE};
 
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
