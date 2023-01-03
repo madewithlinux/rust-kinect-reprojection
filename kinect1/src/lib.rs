@@ -120,8 +120,7 @@ macro_rules! vtable_method {
 macro_rules! try_call_method {
     ($self:expr, $method_name:ident) => (
         unsafe {
-            check_fail(vtable_method!($self, $method_name)($self))?;
-            Ok(())
+            check_fail(vtable_method!($self, $method_name)($self))
         }
     );
     ($self:expr, $method_name:ident, $($args:expr),+) => (
@@ -129,8 +128,7 @@ macro_rules! try_call_method {
             check_fail(vtable_method!($self, $method_name)(
                 $self,
                 $($args),+
-        ))?;
-        KinectResult::Ok(())
+        ))
         }
     );
 }
@@ -265,8 +263,8 @@ impl Sensor {
         ms_to_wait: u32,
         coordinate_mapper: *mut INuiCoordinateMapper,
         color_frame_info: ImageFrameInfo,
-    ) -> KinectResult<(Gray16Image, ImageFrameInfo)> {
-        let (frame_data, depth_frame_info) = self.get_next_frame_data(stream, ms_to_wait)?;
+    ) -> (Gray16Image, ImageFrameInfo) {
+        let (frame_data, depth_frame_info) = self.get_next_frame_data(stream, ms_to_wait).unwrap();
 
         let depth_pixel_count = depth_frame_info.width * depth_frame_info.height;
         let color_pixel_count = color_frame_info.width * color_frame_info.height;
@@ -294,29 +292,28 @@ impl Sensor {
             depth_image_pixels.as_mut_ptr(),
             color_pixel_count as u32,
             depth_image_points.as_mut_ptr()
-        )?;
+        )
+        .unwrap();
 
         let mut output_frame_data = Gray16Image::new(color_frame_info.width as u32, color_frame_info.height as u32);
         for (output_pixel, depth_image_point) in output_frame_data.iter_mut().zip(depth_image_points) {
             *output_pixel = (depth_image_point.depth as u16) << NUI_IMAGE_PLAYER_INDEX_SHIFT;
         }
 
-        Ok((
+        (
             output_frame_data,
             // TODO: should we amend the depth frame info with the new width/height?
             depth_frame_info,
-        ))
+        )
     }
 
     fn get_next_frame_data(
         self: &mut Sensor,
         stream: HANDLE,
         ms_to_wait: u32,
-        // ) -> KinectResult<(usize, usize, Vec<u8>, NUI_IMAGE_TYPE)> {
     ) -> KinectResult<(Vec<u8>, ImageFrameInfo)> {
         let mut frame = NUI_IMAGE_FRAME::default();
         self.image_stream_get_next_frame(stream, ms_to_wait, &mut frame)?;
-        // dbg!(&frame);
 
         let mut locked_rect: NUI_LOCKED_RECT = Default::default();
         try_call_method!(frame.pFrameTexture, LockRect, 0, &mut locked_rect, null_mut(), 0)?;
@@ -372,7 +369,7 @@ pub fn convert_resolution_to_size(resolution: NUI_IMAGE_RESOLUTION) -> (usize, u
 
 fn build_depth_image_buffer(width: usize, height: usize, depth_data: Vec<u8>, image_type: NUI_IMAGE_TYPE) -> Vec<u16> {
     let mut grayscale_data = vec![0; width * height];
-    assert_eq!(image_type, NUI_IMAGE_TYPE_DEPTH);
+    assert!(image_type == NUI_IMAGE_TYPE_DEPTH || image_type == NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX);
     assert_eq!(depth_data.len() / 2, grayscale_data.len());
     for i in 0..(width * height) {
         let depth_and_player_index = u16::from_ne_bytes([depth_data[i * 2], depth_data[i * 2 + 1]]);
@@ -401,13 +398,21 @@ pub fn depth_to_rgb_color(depth: u16) -> Rgb<u8> {
         NUI_IMAGE_DEPTH_MINIMUM => Rgb([0, 0, 255]),
         NUI_IMAGE_DEPTH_TOO_FAR_VALUE => Rgb([0, 255, 255]),
         NUI_IMAGE_DEPTH_UNKNOWN_VALUE => Rgb([255, 255, 0]),
-        depth if depth < NUI_IMAGE_DEPTH_MINIMUM => Rgb([255, 255, 0]),
-        depth => {
-            let normalized =
-                (depth - NUI_IMAGE_DEPTH_MINIMUM) as f64 / (NUI_IMAGE_DEPTH_MAXIMUM - NUI_IMAGE_DEPTH_MINIMUM) as f64;
-            let luma = (normalized * 255.0) as u8;
-            Rgb([luma, luma, luma])
-        }
+        depth => Rgb([(depth % 256) as u8, (depth / 256) as u8, 0u8]),
+        // depth if depth < NUI_IMAGE_DEPTH_MINIMUM => Rgb([255, 255, 0]),
+        // depth if depth > NUI_IMAGE_DEPTH_MAXIMUM => Rgb([0, 255, 0]),
+        // depth => {
+        //     let normalized =
+        //         (depth - NUI_IMAGE_DEPTH_MINIMUM) as f64 / (NUI_IMAGE_DEPTH_MAXIMUM - NUI_IMAGE_DEPTH_MINIMUM) as f64;
+        //     if normalized >= 1.0 {
+        //         Rgb([0, 255, 0])
+        //     } else if normalized <= 0.0 {
+        //         Rgb([0, 0, 255])
+        //     } else {
+        //         let luma = (normalized * 255.0) as u8;
+        //         Rgb([luma, luma, luma])
+        //     }
+        // }
     }
 }
 
@@ -419,47 +424,63 @@ fn frame_thread(sender: FrameMessageSender) -> KinectResult<()> {
     let color_event = unsafe { windows::Win32::System::Threading::CreateEventW(None, true, false, None).unwrap() };
     let depth_event = unsafe { windows::Win32::System::Threading::CreateEventW(None, true, false, None).unwrap() };
 
-    sensor.initialize(NUI_INITIALIZE_FLAG_USES_COLOR | NUI_INITIALIZE_FLAG_USES_DEPTH)?;
+    sensor.initialize(NUI_INITIALIZE_FLAG_USES_COLOR | NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX)?;
+    // sensor.initialize(NUI_INITIALIZE_FLAG_USES_COLOR | NUI_INITIALIZE_FLAG_USES_DEPTH)?;
 
     unsafe {
         windows::Win32::System::Threading::ResetEvent(color_event);
         windows::Win32::System::Threading::ResetEvent(depth_event);
     };
 
+    let depth_stream = sensor
+        // TODO: make this configurable
+        .image_stream_open(
+            NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX,
+            // NUI_IMAGE_TYPE_DEPTH,
+            // NUI_IMAGE_RESOLUTION_640X480,
+            NUI_IMAGE_RESOLUTION_320X240,
+            0,
+            2,
+            unsafe { std::mem::transmute(depth_event.0) },
+        )
+        .unwrap();
+
     let color_stream = sensor
         .image_stream_open(NUI_IMAGE_TYPE_COLOR, NUI_IMAGE_RESOLUTION_640X480, 0, 2, unsafe {
             std::mem::transmute(color_event.0)
-        })
-        .unwrap();
-    let depth_stream = sensor
-        // TODO: make this configurable
-        // .image_stream_open(NUI_IMAGE_TYPE_DEPTH, NUI_IMAGE_RESOLUTION_640X480, 0, 2, unsafe {
-        .image_stream_open(NUI_IMAGE_TYPE_DEPTH, NUI_IMAGE_RESOLUTION_320X240, 0, 2, unsafe {
-            std::mem::transmute(depth_event.0)
         })
         .unwrap();
 
     let coordinate_mapper = sensor.get_coordinate_mapper().unwrap();
 
     std::thread::sleep(Duration::from_millis(100));
-    sensor.set_depth_near_mode(depth_stream, false).unwrap();
+    // sensor.set_depth_near_mode(depth_stream, true).unwrap();
+    // std::thread::sleep(Duration::from_millis(100));
+    // sensor.set_depth_near_mode(depth_stream, false).unwrap();
+    // std::thread::sleep(Duration::from_millis(100));
 
-    let mut current_color_frame = Default::default();
+    let mut current_color_frame = RgbImage::new(640, 480);
     let mut current_color_frame_info = Default::default();
-    let mut current_depth_frame = Default::default();
+    let mut current_depth_frame = Gray16Image::new(640, 480);
     let mut current_depth_frame_info = Default::default();
     loop {
         unsafe { WaitForMultipleObjects(&[color_event, depth_event], false, 100) };
 
         if unsafe { WaitForSingleObject(color_event, 0) } == WAIT_OBJECT_0 {
-            (current_color_frame, current_color_frame_info) = sensor.get_next_color_frame(color_stream, 1).unwrap();
+            (current_color_frame, current_color_frame_info) = sensor.get_next_color_frame(color_stream, 0).unwrap();
         }
-        if unsafe { WaitForSingleObject(depth_event, 0) } == WAIT_OBJECT_0 {
+        // we have to have a color frame to map to in order to map the depth frame
+        if current_color_frame_info.timestamp != Default::default()
+            && unsafe { WaitForSingleObject(depth_event, 0) } == WAIT_OBJECT_0
+        {
             // TODO: should we map depth to color only after receiving both frames? (does it matter?)
-            // (current_depth_frame, current_depth_frame_info) = sensor.get_next_depth_frame(depth_stream, 1).unwrap();
-            (current_depth_frame, current_depth_frame_info) = sensor
-                .get_next_depth_frame_map_to_color_frame(depth_stream, 1, coordinate_mapper, current_color_frame_info)
-                .unwrap();
+            // (current_depth_frame, current_depth_frame_info) = sensor.get_next_depth_frame(depth_stream, 0).unwrap();
+            (current_depth_frame, current_depth_frame_info) = sensor.get_next_depth_frame_map_to_color_frame(
+                depth_stream,
+                0,
+                coordinate_mapper,
+                current_color_frame_info,
+            );
         }
 
         // only send a new frame message if we've got both frames
