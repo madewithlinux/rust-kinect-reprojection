@@ -4,31 +4,16 @@ use image::RgbImage;
 use kinect1::{depth_to_rgb_color, Gray16Image};
 
 use crate::dock_ui::MainCamera;
-use crate::receiver::{ActiveColor, ActiveDepth, DepthBaselineFrame, KinectCurrentFrame, KinectDerivedFrame};
+use crate::receiver::{KinectFrameBufferName, KinectFrameBuffers};
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
 
 #[derive(Component, Reflect)]
-pub struct KinectColorImageHandle(pub Handle<Image>);
-#[derive(Component, Reflect)]
-pub struct KinectDepthImageHandle(pub Handle<Image>);
-
-#[derive(Component, Debug, Reflect)]
-pub struct ColorImageSprite;
-#[derive(Component, Debug, Reflect)]
-pub struct DepthImageSprite;
+pub struct KinectFrameBufferImageHandle(pub KinectFrameBufferName, pub Handle<Image>);
 
 #[derive(Component, Debug, Reflect)]
 pub struct SpritePosition {
     pub relative_scale: Vec3,
     pub relative_translation: Vec3,
-}
-
-#[derive(Component, Debug, Reflect)]
-pub enum ImageSource {
-    Raw,
-    Derived,
-    BackgroundSubtracted,
-    Baseline,
 }
 
 fn update_sprite_transforms2(
@@ -98,8 +83,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
 
     commands.spawn((
         Name::new("color image handle"),
-        KinectColorImageHandle(color_image_handle.clone()),
-        ImageSource::Derived,
+        KinectFrameBufferImageHandle(KinectFrameBufferName::CurrentFrameColor, color_image_handle.clone()),
         SpriteBundle {
             texture: color_image_handle,
             ..default()
@@ -111,8 +95,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
     commands.spawn((
         Name::new("depth image handle"),
-        KinectDepthImageHandle(depth_image_handle.clone()),
-        ImageSource::Derived,
+        KinectFrameBufferImageHandle(KinectFrameBufferName::DerivedFrameDepth, depth_image_handle.clone()),
         SpriteBundle {
             texture: depth_image_handle,
             ..default()
@@ -124,8 +107,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
     commands.spawn((
         Name::new("color subt image handle"),
-        KinectColorImageHandle(color_image_subt_handle.clone()),
-        ImageSource::BackgroundSubtracted,
+        KinectFrameBufferImageHandle(KinectFrameBufferName::ActiveColor, color_image_subt_handle.clone()),
         SpriteBundle {
             texture: color_image_subt_handle,
             ..default()
@@ -137,8 +119,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
     commands.spawn((
         Name::new("depth subt image handle"),
-        KinectDepthImageHandle(depth_image_subt_handle.clone()),
-        ImageSource::BackgroundSubtracted,
+        KinectFrameBufferImageHandle(KinectFrameBufferName::ActiveDepth, depth_image_subt_handle.clone()),
         SpriteBundle {
             texture: depth_image_subt_handle,
             ..default()
@@ -150,51 +131,19 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
 }
 
-fn update_color_image2(
-    current_frame: Query<&KinectCurrentFrame>,
-    derived_frame: Query<&KinectDerivedFrame>,
-    active_color: Query<&ActiveColor>,
-    handle_query: Query<(&KinectColorImageHandle, &ImageSource)>,
+fn update_framebuffer_images(
+    buffers: Query<&KinectFrameBuffers>,
+    frame_buffer_handle_query: Query<&KinectFrameBufferImageHandle>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let derived_frame = derived_frame.single();
-    if derived_frame.0.depth_frame.len() == 0 {
+    let buffers = buffers.single();
+    if buffers.derived_frame.depth_frame.len() == 0 {
         return;
     }
 
-    for (color_handle, source) in handle_query.iter() {
-        if let Some(mut handle) = images.get_mut(&color_handle.0) {
-            handle.data = match source {
-                ImageSource::Raw | ImageSource::Baseline => {
-                    color_frame_to_pixels(&current_frame.single().0.color_frame)
-                }
-                ImageSource::Derived => color_frame_to_pixels(&derived_frame.0.color_frame),
-                ImageSource::BackgroundSubtracted => color_frame_to_pixels(&active_color.single().0),
-            };
-        }
-    }
-}
-fn update_depth_image2(
-    current_frame: Query<&KinectCurrentFrame>,
-    derived_frame: Query<&KinectDerivedFrame>,
-    baseline_depth: Query<&DepthBaselineFrame>,
-    active_depth: Query<&ActiveDepth>,
-    handle_query: Query<(&KinectDepthImageHandle, &ImageSource)>,
-    mut images: ResMut<Assets<Image>>,
-) {
-    let derived_frame = derived_frame.single();
-    if derived_frame.0.depth_frame.len() == 0 {
-        return;
-    }
-
-    for (depth_handle, source) in handle_query.iter() {
-        if let Some(mut handle) = images.get_mut(&depth_handle.0) {
-            handle.data = match source {
-                ImageSource::Raw => depth_frame_to_pixels(&current_frame.single().0.depth_frame),
-                ImageSource::Derived => depth_frame_to_pixels(&derived_frame.0.depth_frame),
-                ImageSource::Baseline => depth_frame_to_pixels(&baseline_depth.single().0),
-                ImageSource::BackgroundSubtracted => depth_frame_to_pixels(&active_depth.single().0),
-            };
+    for KinectFrameBufferImageHandle(buffer_name, handle) in frame_buffer_handle_query.iter() {
+        if let Some(mut image) = images.get_mut(&handle) {
+            image.data = buffers.get_buffer(*buffer_name);
         }
     }
 }
@@ -226,13 +175,10 @@ pub struct FrameDisplayPlugin;
 impl Plugin for FrameDisplayPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_display_frames)
-            // .add_system(update_color_image)
-            .add_system(update_color_image2)
-            .add_system(update_depth_image2)
-            // .add_system(update_sprite_transforms)
+            .add_system(update_framebuffer_images)
             .add_system(update_sprite_transforms2)
-            .register_type::<ImageSource>()
-            .register_type::<KinectColorImageHandle>()
-            .register_type::<KinectDepthImageHandle>();
+            .register_type::<KinectFrameBufferImageHandle>()
+            .register_type::<SpritePosition>()
+            ;
     }
 }

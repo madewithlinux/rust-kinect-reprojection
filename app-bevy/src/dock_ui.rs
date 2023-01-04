@@ -10,7 +10,7 @@ use bevy_render::camera::{CameraProjection, Viewport};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
 
-use crate::receiver::DepthBaselineFrame;
+use crate::receiver::{load_baseline_frame, KinectFrameBuffers};
 
 pub struct AppUiDockPlugin;
 impl Plugin for AppUiDockPlugin {
@@ -191,9 +191,9 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
     ui.vertical(|ui| {
         if ui.button("save depth frame").clicked() {
             let depth_frame = world
-                .query::<&crate::receiver::KinectDerivedFrame>()
+                .query::<&crate::receiver::KinectFrameBuffers>()
                 .single(world)
-                .0
+                .current_frame
                 .depth_frame
                 .clone();
             pool.spawn(async move {
@@ -219,8 +219,10 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
                 .set_file_name("kinect_depth_data_empty.png")
                 .pick_file()
             {
-                world.query::<&mut DepthBaselineFrame>().single_mut(world).0 =
-                    DepthBaselineFrame::load_from(depth_filename).0;
+                world
+                    .query::<&mut KinectFrameBuffers>()
+                    .single_mut(world)
+                    .depth_baseline_frame = load_baseline_frame(depth_filename).unwrap();
             }
         }
     });

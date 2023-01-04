@@ -3,117 +3,147 @@ use bevy::prelude::*;
 use image::{Rgb, RgbImage};
 use kinect1::{start_frame_thread, FrameMessageReceiver, Gray16Image, KinectFrameMessage, NUI_IMAGE_DEPTH_NO_VALUE};
 
-use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
+use crate::{
+    frame_display::{color_frame_to_pixels, depth_frame_to_pixels},
+    COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH,
+};
 
 #[derive(Debug)]
 pub struct KinectReceiver(pub FrameMessageReceiver);
 
-#[derive(Component)]
-pub struct KinectCurrentFrame(pub KinectFrameMessage);
-
-#[derive(Component)]
-pub struct KinectDerivedFrame(pub KinectFrameMessage);
-
-#[derive(Component, Default, Debug, Reflect)]
-pub struct KinectFrameHistorySize {
-    pub buffer_size: usize,
+#[derive(Component, Debug, Reflect)]
+pub struct KinectPostProcessorConfig {
+    pub history_buffer_size: usize,
+    pub depth_threshold: f32,
 }
-#[derive(Component, Default)]
-pub struct KinectFrameHistoryBuffer {
-    pub history: std::collections::VecDeque<KinectFrameMessage>,
+impl Default for KinectPostProcessorConfig {
+    fn default() -> Self {
+        Self {
+            history_buffer_size: 2,
+            depth_threshold: 100.0,
+        }
+    }
+}
+
+#[derive(Component, Default, Reflect, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum KinectFrameBufferName {
+    #[default]
+    CurrentFrameColor,
+    CurrentFrameDepth,
+    DerivedFrameDepth,
+    DepthBaselineFrame,
+    ActiveDepth,
+    ActiveColor,
+}
+
+#[derive(Component)]
+pub struct KinectFrameBuffers {
+    // viewable buffers
+    pub current_frame: KinectFrameMessage,
+    pub derived_frame: KinectFrameMessage,
+    pub depth_baseline_frame: Gray16Image,
+    pub active_depth: Gray16Image,
+    pub active_color: RgbImage,
+    // non-viewable data
+    pub frame_history: std::collections::VecDeque<KinectFrameMessage>,
+}
+
+impl Default for KinectFrameBuffers {
+    fn default() -> Self {
+        let color_frame = RgbImage::new(COLOR_WIDTH as u32, COLOR_HEIGHT as u32);
+        let depth_frame = Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32);
+        let frame_message = KinectFrameMessage {
+            color_frame: color_frame.clone(),
+            depth_frame: depth_frame.clone(),
+            ..Default::default()
+        };
+        Self {
+            current_frame: frame_message.clone(),
+            derived_frame: frame_message.clone(),
+            depth_baseline_frame: depth_frame.clone(),
+            active_depth: depth_frame.clone(),
+            active_color: color_frame.clone(),
+            frame_history: Default::default(),
+        }
+    }
+}
+
+impl KinectFrameBuffers {
+    pub fn get_buffer(&self, buffer_name: KinectFrameBufferName) -> Vec<u8> {
+        match buffer_name {
+            KinectFrameBufferName::CurrentFrameColor => color_frame_to_pixels(&self.current_frame.color_frame),
+            KinectFrameBufferName::CurrentFrameDepth => depth_frame_to_pixels(&self.current_frame.depth_frame),
+            KinectFrameBufferName::DerivedFrameDepth => depth_frame_to_pixels(&self.derived_frame.depth_frame),
+            KinectFrameBufferName::DepthBaselineFrame => depth_frame_to_pixels(&self.depth_baseline_frame),
+            KinectFrameBufferName::ActiveDepth => depth_frame_to_pixels(&self.active_depth),
+            KinectFrameBufferName::ActiveColor => color_frame_to_pixels(&self.active_color),
+        }
+    }
 }
 
 fn receive_kinect_current_frame(
     receiver: NonSend<KinectReceiver>,
-    mut current_frame_query: Query<(
-        &mut KinectCurrentFrame,
-        &KinectFrameHistorySize,
-        &mut KinectFrameHistoryBuffer,
-        &mut KinectDerivedFrame,
-    )>,
+    mut current_frame_query: Query<(&KinectPostProcessorConfig, &mut KinectFrameBuffers)>,
 ) {
     if let Ok(received_frame) = receiver.0.try_recv() {
-        let (mut current_frame, history_size, mut history_buf, mut derived_frame) = current_frame_query.single_mut();
-        current_frame.0 = received_frame.clone();
-        derived_frame.0 = received_frame.clone();
-        for historic_frame in history_buf.history.iter() {
-            for (i, depth) in historic_frame.depth_frame.iter().enumerate() {
-                if depth == &NUI_IMAGE_DEPTH_NO_VALUE {
-                    continue;
-                }
-                if derived_frame.0.depth_frame.get(i) == Some(&NUI_IMAGE_DEPTH_NO_VALUE) {
-                    *derived_frame.0.depth_frame.get_mut(i).unwrap() = *depth;
-                }
+        let (config, mut buffers) = current_frame_query.single_mut();
+        receive_and_process_frame(received_frame, config, &mut buffers);
+    }
+}
+
+fn receive_and_process_frame(
+    received_frame: KinectFrameMessage,
+    config: &KinectPostProcessorConfig,
+    buffers: &mut KinectFrameBuffers,
+) {
+    buffers.current_frame = received_frame.clone();
+    buffers.derived_frame = received_frame.clone();
+    for historic_frame in buffers.frame_history.iter() {
+        for (i, depth) in historic_frame.depth_frame.iter().enumerate() {
+            if depth == &NUI_IMAGE_DEPTH_NO_VALUE {
+                continue;
+            }
+            if buffers.derived_frame.depth_frame.get(i) == Some(&NUI_IMAGE_DEPTH_NO_VALUE) {
+                *buffers.derived_frame.depth_frame.get_mut(i).unwrap() = *depth;
             }
         }
-        while history_buf.history.len() > history_size.buffer_size {
-            history_buf.history.pop_back();
-        }
-        history_buf.history.push_front(received_frame.clone());
     }
-}
-
-#[derive(Component)]
-pub struct DepthBaselineFrame(pub Gray16Image);
-
-#[derive(Component, Default, Debug, Reflect)]
-pub struct DepthThreshold(pub f32);
-
-#[derive(Component)]
-pub struct ActiveDepth(pub Gray16Image);
-
-#[derive(Component)]
-pub struct ActiveColor(pub RgbImage);
-
-impl DepthBaselineFrame {
-    pub fn load_from(path: impl AsRef<std::path::Path>) -> Self {
-        Self(image::open(path).unwrap().into_luma16())
+    while buffers.frame_history.len() > config.history_buffer_size {
+        buffers.frame_history.pop_back();
     }
-}
+    buffers.frame_history.push_front(received_frame.clone());
 
-fn subtract_depth(
-    mut query: Query<
-        (
-            &KinectDerivedFrame,
-            &DepthBaselineFrame,
-            &DepthThreshold,
-            &mut ActiveDepth,
-            &mut ActiveColor,
-        ),
-        Changed<KinectCurrentFrame>,
-    >,
-) {
-    let Ok((
-        KinectDerivedFrame(derived_frame),
-        DepthBaselineFrame(baseline_frame),
-        DepthThreshold(depth_threshold),
-        mut active_depth,
-        mut active_color,
-    )) = query.get_single_mut() else {
-        return
-    };
+    // subtract depth using depth threshold
+    let depth_threshold = config.depth_threshold as u16;
 
-    let depth_threshold = *depth_threshold as u16;
-
-    for (i, current_depth) in derived_frame.depth_frame.iter().enumerate() {
-        let baseline_depth = baseline_frame.get(i).unwrap();
-        *active_depth.0.get_mut(i).unwrap() = match (current_depth, baseline_depth) {
+    for (i, current_depth) in buffers.derived_frame.depth_frame.iter().enumerate() {
+        let baseline_depth = buffers.depth_baseline_frame.get(i).unwrap();
+        *buffers.active_depth.get_mut(i).unwrap() = match (current_depth, baseline_depth) {
             (&NUI_IMAGE_DEPTH_NO_VALUE, _) => 0u16,
             (&value, &NUI_IMAGE_DEPTH_NO_VALUE) => value,
-            // (&value, &baseline) if (baseline - value) < depth_threshold => value,
             (&value, &baseline) if (value + depth_threshold) < baseline => value,
             _ => 0u16,
         };
     }
 
-    for (x, y, pixel) in (*active_color).0.enumerate_pixels_mut() {
-        let depth = active_depth.0.get_pixel(x, y).0[0];
+    for (x, y, pixel) in buffers.active_color.enumerate_pixels_mut() {
+        let depth = buffers.active_depth.get_pixel(x, y).0[0];
         *pixel = if depth != NUI_IMAGE_DEPTH_NO_VALUE {
-            *derived_frame.color_frame.get_pixel(x, y)
+            *buffers.derived_frame.color_frame.get_pixel(x, y)
         } else {
             Rgb([0, 0, 0])
         }
     }
+}
+
+pub fn load_baseline_frame(path: impl AsRef<std::path::Path>) -> Result<Gray16Image, image::ImageError> {
+    image::open(path).map(|img| img.into_luma16())
+}
+pub fn try_load_baseline_frame(path: impl AsRef<std::path::Path>) -> Gray16Image {
+    image::open(path).map(|img| img.into_luma16()).unwrap_or_else(|_| {
+        info!("failed to load depth baseline frame");
+        Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32)
+    })
 }
 
 fn setup_kinect_receiver(world: &mut World) {
@@ -121,16 +151,11 @@ fn setup_kinect_receiver(world: &mut World) {
     world.insert_non_send_resource(KinectReceiver(receiver));
     world.spawn((
         Name::new("frame and buffer"),
-        KinectCurrentFrame::default(),
-        KinectFrameHistorySize { buffer_size: 2 },
-        KinectFrameHistoryBuffer {
-            history: std::collections::VecDeque::with_capacity(2),
+        KinectPostProcessorConfig::default(),
+        KinectFrameBuffers {
+            depth_baseline_frame: try_load_baseline_frame("kinect_depth_data_empty.png"),
+            ..Default::default()
         },
-        KinectDerivedFrame::default(),
-        DepthBaselineFrame::load_from("kinect_depth_data_empty.png"),
-        DepthThreshold(5.0),
-        ActiveDepth::default(),
-        ActiveColor::default(),
     ));
 }
 
@@ -139,42 +164,6 @@ impl Plugin for KinectReceiverPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_kinect_receiver)
             .add_system(receive_kinect_current_frame)
-            .add_system(subtract_depth.after(receive_kinect_current_frame))
-            .register_type::<KinectFrameHistorySize>()
-            .register_type::<DepthThreshold>();
-    }
-}
-
-impl Default for KinectCurrentFrame {
-    fn default() -> Self {
-        Self(KinectFrameMessage {
-            color_frame: RgbImage::new(COLOR_WIDTH as u32, COLOR_HEIGHT as u32),
-            depth_frame: Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32),
-            ..Default::default()
-        })
-    }
-}
-impl Default for KinectDerivedFrame {
-    fn default() -> Self {
-        Self(KinectFrameMessage {
-            color_frame: RgbImage::new(COLOR_WIDTH as u32, COLOR_HEIGHT as u32),
-            depth_frame: Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32),
-            ..Default::default()
-        })
-    }
-}
-impl Default for DepthBaselineFrame {
-    fn default() -> Self {
-        Self(Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32))
-    }
-}
-impl Default for ActiveDepth {
-    fn default() -> Self {
-        Self(Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32))
-    }
-}
-impl Default for ActiveColor {
-    fn default() -> Self {
-        Self(RgbImage::new(COLOR_WIDTH as u32, COLOR_HEIGHT as u32))
+            .register_type::<KinectPostProcessorConfig>();
     }
 }
