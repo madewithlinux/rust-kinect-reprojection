@@ -10,7 +10,7 @@ use image::{ImageBuffer, Luma};
 pub use image::{Rgb, RgbImage};
 
 use kinect1_sys::{
-    INuiCoordinateMapper, INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, HANDLE, HRESULT,
+    INuiCoordinateMapper, INuiFrameTexture, INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, HANDLE, HRESULT,
     NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME, NUI_IMAGE_PLAYER_INDEX_MASK,
     NUI_IMAGE_PLAYER_INDEX_SHIFT, NUI_IMAGE_STREAM_FLAG_DISTINCT_OVERFLOW_DEPTH_VALUES,
     NUI_IMAGE_STREAM_FLAG_ENABLE_NEAR_MODE, NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA, NUI_LOCKED_RECT,
@@ -266,20 +266,11 @@ impl Sensor {
         coordinate_mapper: *mut INuiCoordinateMapper,
         color_frame_info: ImageFrameInfo,
     ) -> (Gray16Image, ImageFrameInfo) {
-        let (frame_data, depth_frame_info) = self.get_next_frame_data(stream, ms_to_wait).unwrap();
+        let (mut depth_image_pixels, depth_frame_info) = self.get_next_depth_frame_pixels(stream, ms_to_wait).unwrap();
 
         let depth_pixel_count = depth_frame_info.width * depth_frame_info.height;
         let color_pixel_count = color_frame_info.width * color_frame_info.height;
 
-        let mut depth_image_pixels: Vec<NUI_DEPTH_IMAGE_PIXEL> = frame_data
-            .chunks_exact(2)
-            .into_iter()
-            .map(|a| u16::from_ne_bytes([a[0], a[1]]))
-            .map(|d| NUI_DEPTH_IMAGE_PIXEL {
-                depth: NuiDepthPixelToDepth(d),
-                playerIndex: NuiDepthPixelToPlayerIndex(d),
-            })
-            .collect();
         assert_eq!(depth_pixel_count, depth_image_pixels.len());
 
         let mut depth_image_points: Vec<NUI_DEPTH_IMAGE_POINT> = vec![Default::default(); color_pixel_count];
@@ -320,6 +311,55 @@ impl Sensor {
         )
     }
 
+    fn get_next_depth_frame_pixels(
+        self: &mut Sensor,
+        stream: HANDLE,
+        ms_to_wait: u32,
+    ) -> KinectResult<(Vec<NUI_DEPTH_IMAGE_PIXEL>, ImageFrameInfo)> {
+        let mut frame = NUI_IMAGE_FRAME::default();
+        self.image_stream_get_next_frame(stream, ms_to_wait, &mut frame)?;
+        let mut near_mode = 0i32;
+        let mut frame_texture: *mut INuiFrameTexture = null_mut();
+
+        try_call_method!(
+            self.delegate,
+            NuiImageFrameGetDepthImagePixelFrameTexture,
+            stream,
+            &mut frame,
+            &mut near_mode,
+            &mut frame_texture
+        )?;
+
+        let mut locked_rect: NUI_LOCKED_RECT = Default::default();
+        try_call_method!(frame_texture, LockRect, 0, &mut locked_rect, null_mut(), 0)?;
+
+        let (width, height) = convert_resolution_to_size(frame.eResolution);
+        let mut frame_data = vec![NUI_DEPTH_IMAGE_PIXEL::default(); width * height];
+
+        let input_slice: &[NUI_DEPTH_IMAGE_PIXEL] = unsafe {
+            std::slice::from_raw_parts(
+                std::mem::transmute(locked_rect.pBits),
+                (locked_rect.size as usize) / std::mem::size_of::<NUI_DEPTH_IMAGE_PIXEL>(),
+            )
+        };
+        frame_data.copy_from_slice(input_slice);
+
+        try_call_method!(frame_texture, UnlockRect, 0)?;
+
+        self.image_stream_release_frame(stream, &mut frame)?;
+        Ok((
+            frame_data,
+            ImageFrameInfo {
+                width,
+                height,
+                timestamp: frame.liTimeStamp,
+                frame_number: frame.dwFrameNumber,
+                image_type: frame.eImageType,
+                resolution: frame.eResolution,
+                frame_flags: frame.dwFrameFlags,
+            },
+        ))
+    }
     fn get_next_frame_data(
         self: &mut Sensor,
         stream: HANDLE,
