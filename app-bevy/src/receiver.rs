@@ -4,7 +4,7 @@ use image::{Rgb, RgbImage};
 use kinect1::{start_frame_thread, FrameMessageReceiver, Gray16Image, KinectFrameMessage, NUI_IMAGE_DEPTH_NO_VALUE};
 
 use crate::{
-    frame_display::{color_frame_to_pixels, depth_frame_to_pixels},
+    frame_visualization_util::{color_frame_to_pixels, depth_frame_to_pixels, player_index_frame_to_pixels},
     COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH,
 };
 
@@ -28,10 +28,12 @@ impl Default for KinectPostProcessorConfig {
 #[derive(Component, Default, Reflect, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum KinectFrameBufferName {
     #[default]
-    CurrentFrameColor,
-    CurrentFrameDepth,
-    DerivedFrameDepth,
-    DepthBaselineFrame,
+    CurrentColor,
+    CurrentDepth,
+    DerivedDepth,
+    CurrentPlayerIndex,
+    DerivedPlayerIndex,
+    DepthBaseline,
     ActiveDepth,
     ActiveColor,
 }
@@ -71,12 +73,14 @@ impl Default for KinectFrameBuffers {
 impl KinectFrameBuffers {
     pub fn get_buffer(&self, buffer_name: KinectFrameBufferName) -> Vec<u8> {
         match buffer_name {
-            KinectFrameBufferName::CurrentFrameColor => color_frame_to_pixels(&self.current_frame.color_frame),
-            KinectFrameBufferName::CurrentFrameDepth => depth_frame_to_pixels(&self.current_frame.depth_frame),
-            KinectFrameBufferName::DerivedFrameDepth => depth_frame_to_pixels(&self.derived_frame.depth_frame),
-            KinectFrameBufferName::DepthBaselineFrame => depth_frame_to_pixels(&self.depth_baseline_frame),
+            KinectFrameBufferName::CurrentColor => color_frame_to_pixels(&self.current_frame.color_frame),
+            KinectFrameBufferName::CurrentDepth => depth_frame_to_pixels(&self.current_frame.depth_frame),
+            KinectFrameBufferName::DerivedDepth => depth_frame_to_pixels(&self.derived_frame.depth_frame),
+            KinectFrameBufferName::DepthBaseline => depth_frame_to_pixels(&self.depth_baseline_frame),
             KinectFrameBufferName::ActiveDepth => depth_frame_to_pixels(&self.active_depth),
             KinectFrameBufferName::ActiveColor => color_frame_to_pixels(&self.active_color),
+            KinectFrameBufferName::CurrentPlayerIndex => player_index_frame_to_pixels(&self.current_frame.depth_frame),
+            KinectFrameBufferName::DerivedPlayerIndex => player_index_frame_to_pixels(&self.derived_frame.depth_frame),
         }
     }
 }
@@ -121,7 +125,7 @@ fn receive_and_process_frame(
         *buffers.active_depth.get_mut(i).unwrap() = match (current_depth, baseline_depth) {
             (&NUI_IMAGE_DEPTH_NO_VALUE, _) => 0u16,
             (&value, &NUI_IMAGE_DEPTH_NO_VALUE) => value,
-            (&value, &baseline) if (value + depth_threshold) < baseline => value,
+            (&value, &baseline) if value < baseline && (value + depth_threshold) < baseline => value,
             _ => 0u16,
         };
     }

@@ -4,6 +4,7 @@ use dock_ui::MainCamera;
 pub mod dock_ui;
 pub mod frame_display;
 pub mod receiver;
+pub mod frame_visualization_util;
 
 pub const COLOR_WIDTH: usize = 640;
 pub const COLOR_HEIGHT: usize = 480;

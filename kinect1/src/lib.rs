@@ -10,10 +10,12 @@ use image::{ImageBuffer, Luma};
 pub use image::{Rgb, RgbImage};
 
 use kinect1_sys::{
-    INuiCoordinateMapper, INuiSensor, NuiCreateSensorByIndex, NuiDepthPixelToDepth, NuiDepthPixelToPlayerIndex,
-    NuiGetSensorCount, HANDLE, HRESULT, NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME,
-    NUI_IMAGE_PLAYER_INDEX_SHIFT, NUI_IMAGE_STREAM_FLAG_ENABLE_NEAR_MODE, NUI_LOCKED_RECT,
+    INuiCoordinateMapper, INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, HANDLE, HRESULT,
+    NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME, NUI_IMAGE_PLAYER_INDEX_MASK,
+    NUI_IMAGE_PLAYER_INDEX_SHIFT, NUI_IMAGE_STREAM_FLAG_DISTINCT_OVERFLOW_DEPTH_VALUES,
+    NUI_IMAGE_STREAM_FLAG_ENABLE_NEAR_MODE, NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA, NUI_LOCKED_RECT,
 };
+pub use kinect1_sys::{NuiDepthPixelToDepth, NuiDepthPixelToPlayerIndex};
 
 pub const NUI_IMAGE_RESOLUTION_1280X960: NUI_IMAGE_RESOLUTION =
     kinect1_sys::_NUI_IMAGE_RESOLUTION_NUI_IMAGE_RESOLUTION_1280x960;
@@ -297,7 +299,18 @@ impl Sensor {
 
         let mut output_frame_data = Gray16Image::new(color_frame_info.width as u32, color_frame_info.height as u32);
         for (output_pixel, depth_image_point) in output_frame_data.iter_mut().zip(depth_image_points) {
-            *output_pixel = (depth_image_point.depth as u16) << NUI_IMAGE_PLAYER_INDEX_SHIFT;
+            // find the original depth pixel so that we can get the original player index
+            let original_depth_index = if depth_image_point.x > 0
+                && depth_image_point.y > 0
+                && depth_image_point.x < (depth_frame_info.width as i32)
+                && depth_image_point.y < (depth_frame_info.height as i32)
+            {
+                (depth_image_point.y as usize) * depth_frame_info.width + (depth_image_point.x as usize)
+            } else {
+                0
+            };
+            let player_index = depth_image_pixels[original_depth_index].playerIndex;
+            *output_pixel = (depth_image_point.depth as u16) << NUI_IMAGE_PLAYER_INDEX_SHIFT | player_index;
         }
 
         (
@@ -424,8 +437,12 @@ fn frame_thread(sender: FrameMessageSender) -> KinectResult<()> {
     let color_event = unsafe { windows::Win32::System::Threading::CreateEventW(None, true, false, None).unwrap() };
     let depth_event = unsafe { windows::Win32::System::Threading::CreateEventW(None, true, false, None).unwrap() };
 
-    sensor.initialize(NUI_INITIALIZE_FLAG_USES_COLOR | NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX)?;
-    // sensor.initialize(NUI_INITIALIZE_FLAG_USES_COLOR | NUI_INITIALIZE_FLAG_USES_DEPTH)?;
+    sensor.initialize(
+        NUI_INITIALIZE_FLAG_USES_COLOR
+            | NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX
+            | NUI_INITIALIZE_FLAG_USES_SKELETON
+            | NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA,
+    )?;
 
     unsafe {
         windows::Win32::System::Threading::ResetEvent(color_event);
@@ -439,7 +456,7 @@ fn frame_thread(sender: FrameMessageSender) -> KinectResult<()> {
             // NUI_IMAGE_TYPE_DEPTH,
             // NUI_IMAGE_RESOLUTION_640X480,
             NUI_IMAGE_RESOLUTION_320X240,
-            0,
+            NUI_IMAGE_STREAM_FLAG_DISTINCT_OVERFLOW_DEPTH_VALUES,
             2,
             unsafe { std::mem::transmute(depth_event.0) },
         )

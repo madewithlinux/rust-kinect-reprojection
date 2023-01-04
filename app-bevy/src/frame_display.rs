@@ -83,7 +83,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
 
     commands.spawn((
         Name::new("color image handle"),
-        KinectFrameBufferImageHandle(KinectFrameBufferName::CurrentFrameColor, color_image_handle.clone()),
+        KinectFrameBufferImageHandle(KinectFrameBufferName::CurrentColor, color_image_handle.clone()),
         SpriteBundle {
             texture: color_image_handle,
             ..default()
@@ -95,7 +95,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
     commands.spawn((
         Name::new("depth image handle"),
-        KinectFrameBufferImageHandle(KinectFrameBufferName::DerivedFrameDepth, depth_image_handle.clone()),
+        KinectFrameBufferImageHandle(KinectFrameBufferName::DerivedDepth, depth_image_handle.clone()),
         SpriteBundle {
             texture: depth_image_handle,
             ..default()
@@ -119,7 +119,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
     commands.spawn((
         Name::new("depth subt image handle"),
-        KinectFrameBufferImageHandle(KinectFrameBufferName::ActiveDepth, depth_image_subt_handle.clone()),
+        KinectFrameBufferImageHandle(KinectFrameBufferName::CurrentPlayerIndex, depth_image_subt_handle.clone()),
         SpriteBundle {
             texture: depth_image_subt_handle,
             ..default()
@@ -146,29 +146,6 @@ fn update_framebuffer_images(
             image.data = buffers.get_buffer(*buffer_name);
         }
     }
-}
-
-pub fn color_frame_to_pixels(color_frame: &RgbImage) -> Vec<u8> {
-    let mut color_pixels: Vec<u8> = Vec::with_capacity(COLOR_WIDTH * COLOR_HEIGHT * 4);
-    for &pixel in color_frame.pixels() {
-        color_pixels.push(pixel.0[0]);
-        color_pixels.push(pixel.0[1]);
-        color_pixels.push(pixel.0[2]);
-        color_pixels.push(255); // alpha
-    }
-    color_pixels
-}
-
-pub fn depth_frame_to_pixels(depth_frame: &Gray16Image) -> Vec<u8> {
-    let mut depth_pixels: Vec<u8> = Vec::with_capacity(DEPTH_WIDTH * DEPTH_HEIGHT * 4);
-    for &depth in depth_frame.iter() {
-        let image::Rgb([r, g, b]) = depth_to_rgb_color(depth);
-        depth_pixels.push(r);
-        depth_pixels.push(g);
-        depth_pixels.push(b);
-        depth_pixels.push(255); // alpha
-    }
-    depth_pixels
 }
 
 pub struct FrameDisplayPlugin;
