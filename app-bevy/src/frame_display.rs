@@ -1,14 +1,9 @@
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureFormat};
-use image::RgbImage;
-use kinect1::{depth_to_rgb_color, Gray16Image};
 
 use crate::dock_ui::MainCamera;
-use crate::receiver::{KinectFrameBufferName, KinectFrameBuffers};
+use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferImageHandle, FrameBufferDescriptor};
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
-
-#[derive(Component, Reflect)]
-pub struct KinectFrameBufferImageHandle(pub KinectFrameBufferName, pub Handle<Image>);
 
 #[derive(Component, Debug, Reflect)]
 pub struct SpritePosition {
@@ -83,7 +78,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
 
     commands.spawn((
         Name::new("color image handle"),
-        KinectFrameBufferImageHandle(KinectFrameBufferName::CurrentColor, color_image_handle.clone()),
+        FrameBufferImageHandle(FrameBufferDescriptor::CurrentColor, color_image_handle.clone()),
         SpriteBundle {
             texture: color_image_handle,
             ..default()
@@ -95,7 +90,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
     commands.spawn((
         Name::new("depth image handle"),
-        KinectFrameBufferImageHandle(KinectFrameBufferName::DerivedDepth, depth_image_handle.clone()),
+        FrameBufferImageHandle(FrameBufferDescriptor::DerivedDepth, depth_image_handle.clone()),
         SpriteBundle {
             texture: depth_image_handle,
             ..default()
@@ -107,7 +102,7 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
     commands.spawn((
         Name::new("color subt image handle"),
-        KinectFrameBufferImageHandle(KinectFrameBufferName::ActiveColor, color_image_subt_handle.clone()),
+        FrameBufferImageHandle(FrameBufferDescriptor::ActiveColor, color_image_subt_handle.clone()),
         SpriteBundle {
             texture: color_image_subt_handle,
             ..default()
@@ -119,7 +114,10 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
     commands.spawn((
         Name::new("depth subt image handle"),
-        KinectFrameBufferImageHandle(KinectFrameBufferName::CurrentPlayerIndex, depth_image_subt_handle.clone()),
+        FrameBufferImageHandle(
+            FrameBufferDescriptor::CurrentPlayerIndex,
+            depth_image_subt_handle.clone(),
+        ),
         SpriteBundle {
             texture: depth_image_subt_handle,
             ..default()
@@ -131,31 +129,13 @@ fn setup_display_frames(mut commands: Commands, mut images: ResMut<Assets<Image>
     ));
 }
 
-fn update_framebuffer_images(
-    buffers: Query<&KinectFrameBuffers>,
-    frame_buffer_handle_query: Query<&KinectFrameBufferImageHandle>,
-    mut images: ResMut<Assets<Image>>,
-) {
-    let buffers = buffers.single();
-    if buffers.derived_frame.depth_frame.len() == 0 {
-        return;
-    }
-
-    for KinectFrameBufferImageHandle(buffer_name, handle) in frame_buffer_handle_query.iter() {
-        if let Some(mut image) = images.get_mut(&handle) {
-            image.data = buffers.get_buffer(*buffer_name);
-        }
-    }
-}
-
 pub struct FrameDisplayPlugin;
 impl Plugin for FrameDisplayPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_display_frames)
             .add_system(update_framebuffer_images)
             .add_system(update_sprite_transforms2)
-            .register_type::<KinectFrameBufferImageHandle>()
-            .register_type::<SpritePosition>()
-            ;
+            .register_type::<FrameBufferImageHandle>()
+            .register_type::<SpritePosition>();
     }
 }

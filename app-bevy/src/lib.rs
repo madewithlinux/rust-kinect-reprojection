@@ -24,7 +24,7 @@ pub fn app_main() {
             ..default()
         }))
         .add_plugin(receiver::KinectReceiverPlugin)
-        .add_plugin(frame_display::FrameDisplayPlugin)
+        // .add_plugin(frame_display::FrameDisplayPlugin)
         .add_plugin(dock_ui::AppUiDockPlugin)
         .register_type::<MainCamera>()
         .run();

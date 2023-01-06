@@ -11,8 +11,8 @@ use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
 
-use crate::frame_display::KinectFrameBufferImageHandle;
-use crate::receiver::{load_baseline_frame, KinectFrameBufferName, KinectFrameBuffers};
+use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferImageHandle, FrameBufferDescriptor};
+use crate::receiver::{load_baseline_frame, KinectFrameBuffers};
 use crate::{COLOR_HEIGHT, COLOR_WIDTH};
 
 pub struct AppUiDockPlugin;
@@ -29,6 +29,8 @@ impl Plugin for AppUiDockPlugin {
             .add_startup_system(spawn_2d_camera)
             .add_system(set_camera_viewport)
             .add_system(set_gizmo_mode)
+            .add_system(update_framebuffer_images)
+            .register_type::<FrameBufferImageHandle>()
             .register_type::<Option<Handle<Image>>>()
             .register_type::<AlphaMode>();
     }
@@ -100,12 +102,12 @@ struct UiState {
 impl UiState {
     pub fn new() -> Self {
         let mut tree = Tree::new(vec![
-            Window::FrameBuffer(KinectFrameBufferName::PointCloud),
-            Window::FrameBuffer(KinectFrameBufferName::default()),
-            Window::FrameBuffer(KinectFrameBufferName::CurrentDepth),
-            Window::FrameBuffer(KinectFrameBufferName::DerivedDepth),
-            Window::FrameBuffer(KinectFrameBufferName::CurrentPlayerIndex),
-            Window::FrameBuffer(KinectFrameBufferName::DerivedPlayerIndex),
+            Window::FrameBuffer(FrameBufferDescriptor::CurrentColor),
+            Window::FrameBuffer(FrameBufferDescriptor::PointCloud),
+            Window::FrameBuffer(FrameBufferDescriptor::CurrentDepth),
+            Window::FrameBuffer(FrameBufferDescriptor::DerivedDepth),
+            Window::FrameBuffer(FrameBufferDescriptor::CurrentPlayerIndex),
+            Window::FrameBuffer(FrameBufferDescriptor::DerivedPlayerIndex),
             Window::GameView,
         ]);
         let [game, _inspector] = tree.split_right(NodeIndex::root(), 0.75, vec![Window::Inspector]);
@@ -153,7 +155,7 @@ enum Window {
     Assets,
     Inspector,
     Controls,
-    FrameBuffer(KinectFrameBufferName),
+    FrameBuffer(FrameBufferDescriptor),
 }
 
 struct TabViewer<'a> {
@@ -281,13 +283,13 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
 
 fn get_or_create_frame_buffer_image_handle(
     world: &mut World,
-    buffer_name: &KinectFrameBufferName,
+    buffer_name: &FrameBufferDescriptor,
     egui_context: &mut bevy_egui::EguiContext,
 ) -> (Handle<Image>, egui::TextureId) {
     if let Some(found) = world
-        .query::<&KinectFrameBufferImageHandle>()
+        .query::<&FrameBufferImageHandle>()
         .iter(world)
-        .find(|&KinectFrameBufferImageHandle(b, _)| b == buffer_name)
+        .find(|&FrameBufferImageHandle(b, _)| b == buffer_name)
     {
         (found.1.clone(), egui_context.add_image(found.1.clone()))
     } else {
@@ -304,7 +306,7 @@ fn get_or_create_frame_buffer_image_handle(
         ));
         world.spawn((
             Name::new(format!("auto:{:?}", buffer_name)),
-            KinectFrameBufferImageHandle(*buffer_name, image_handle.clone()),
+            FrameBufferImageHandle(*buffer_name, image_handle.clone()),
         ));
         (image_handle.clone(), egui_context.add_image(image_handle))
     }

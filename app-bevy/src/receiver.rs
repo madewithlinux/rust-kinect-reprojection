@@ -9,10 +9,7 @@ use kinect1::{
     NUI_IMAGE_DEPTH_NO_VALUE,
 };
 
-use crate::{
-    frame_visualization_util::{color_frame_to_pixels, depth_frame_to_pixels, player_index_frame_to_pixels},
-    COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH,
-};
+use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
 
 #[derive(Debug)]
 pub struct KinectReceiver(pub FrameMessageReceiver);
@@ -22,6 +19,7 @@ pub struct KinectPostProcessorConfig {
     pub history_buffer_size: usize,
     pub depth_threshold: f32,
     pub sensor_tilt_angle_deg: f32,
+    pub baseline_threshold_background_removal_enabled: bool,
 }
 impl Default for KinectPostProcessorConfig {
     fn default() -> Self {
@@ -29,22 +27,9 @@ impl Default for KinectPostProcessorConfig {
             history_buffer_size: 2,
             depth_threshold: 100.0,
             sensor_tilt_angle_deg: -33.0,
+            baseline_threshold_background_removal_enabled: false,
         }
     }
-}
-
-#[derive(Component, Default, Debug, Reflect, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum KinectFrameBufferName {
-    #[default]
-    CurrentColor,
-    CurrentDepth,
-    DerivedDepth,
-    CurrentPlayerIndex,
-    DerivedPlayerIndex,
-    DepthBaseline,
-    ActiveDepth,
-    ActiveColor,
-    PointCloud,
 }
 
 #[derive(Component)]
@@ -81,33 +66,6 @@ impl Default for KinectFrameBuffers {
     }
 }
 
-impl KinectFrameBuffers {
-    pub fn get_buffer(&self, buffer_name: KinectFrameBufferName) -> Vec<u8> {
-        match buffer_name {
-            KinectFrameBufferName::CurrentColor => color_frame_to_pixels(&self.current_frame.color_frame),
-            KinectFrameBufferName::CurrentDepth => depth_frame_to_pixels(&self.current_frame.depth_frame),
-            KinectFrameBufferName::DerivedDepth => depth_frame_to_pixels(&self.derived_frame.depth_frame),
-            KinectFrameBufferName::DepthBaseline => depth_frame_to_pixels(&self.depth_baseline_frame),
-            KinectFrameBufferName::ActiveDepth => depth_frame_to_pixels(&self.active_depth),
-            KinectFrameBufferName::ActiveColor => color_frame_to_pixels(&self.active_color),
-            KinectFrameBufferName::CurrentPlayerIndex => player_index_frame_to_pixels(&self.current_frame.depth_frame),
-            KinectFrameBufferName::DerivedPlayerIndex => player_index_frame_to_pixels(&self.derived_frame.depth_frame),
-            KinectFrameBufferName::PointCloud => self
-                .point_cloud
-                .elements_row_major_iter()
-                .flat_map(|v| {
-                    [
-                        (v.x.abs() % 256.0) as u8,
-                        (v.y.abs() % 256.0) as u8,
-                        (v.z.abs() % 256.0) as u8,
-                        255u8,
-                    ]
-                })
-                .collect(),
-        }
-    }
-}
-
 fn receive_kinect_current_frame(
     receiver: NonSend<KinectReceiver>,
     mut current_frame_query: Query<(&KinectPostProcessorConfig, &mut KinectFrameBuffers)>,
@@ -140,6 +98,25 @@ fn process_received_frame(
     }
     buffers.frame_history.push_front(received_frame.clone());
 
+    if config.baseline_threshold_background_removal_enabled {
+        baseline_threshold_background_removal(config, buffers);
+    }
+
+    for (i, j, depth_luma) in buffers.derived_frame.depth_frame.enumerate_pixels() {
+        let xyz = convert_depth_to_xyz(
+            DEPTH_WIDTH as f32,
+            DEPTH_HEIGHT as f32,
+            i as f32,
+            j as f32,
+            NuiDepthPixelToDepth(depth_luma.0[0]) as f32,
+        );
+        // TODO: use a real correction factor instead of this
+        let xyz = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0).transform_vector3(xyz);
+        buffers.point_cloud[(j as usize, i as usize)] = xyz;
+    }
+}
+
+pub fn baseline_threshold_background_removal(config: &KinectPostProcessorConfig, buffers: &mut KinectFrameBuffers) {
     // subtract depth using depth threshold
     let depth_threshold = config.depth_threshold as u16;
 
@@ -160,19 +137,6 @@ fn process_received_frame(
         } else {
             Rgb([0, 0, 0])
         }
-    }
-
-    for (i, j, depth_luma) in buffers.derived_frame.depth_frame.enumerate_pixels() {
-        let xyz = convert_depth_to_xyz(
-            DEPTH_WIDTH as f32,
-            DEPTH_HEIGHT as f32,
-            i as f32,
-            j as f32,
-            NuiDepthPixelToDepth(depth_luma.0[0]) as f32,
-        );
-        // TODO: use a real correction factor instead of this
-        let xyz = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0).transform_vector3(xyz);
-        buffers.point_cloud[(j as usize, i as usize)] = xyz;
     }
 }
 
