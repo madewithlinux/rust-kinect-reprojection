@@ -7,10 +7,13 @@ use bevy_inspector_egui::bevy_inspector::{self, ui_for_entities_shared_component
 use bevy_inspector_egui::DefaultInspectorConfigPlugin;
 use bevy_reflect::TypeRegistry;
 use bevy_render::camera::{CameraProjection, Viewport};
+use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
 
-use crate::receiver::{load_baseline_frame, KinectFrameBuffers};
+use crate::frame_display::KinectFrameBufferImageHandle;
+use crate::receiver::{load_baseline_frame, KinectFrameBufferName, KinectFrameBuffers};
+use crate::{COLOR_HEIGHT, COLOR_WIDTH};
 
 pub struct AppUiDockPlugin;
 impl Plugin for AppUiDockPlugin {
@@ -54,6 +57,10 @@ fn set_camera_viewport(
 
     let viewport_pos = ui_state.viewport_rect.left_top().to_vec2() * scale_factor as f32;
     let viewport_size = ui_state.viewport_rect.size() * scale_factor as f32;
+    if ui_state.viewport_rect == egui::Rect::NOTHING {
+        // the game view tab hasn't been displayed yet
+        return;
+    }
 
     cam.viewport = Some(Viewport {
         physical_position: UVec2::new(viewport_pos.x as u32, viewport_pos.y as u32),
@@ -92,7 +99,14 @@ struct UiState {
 
 impl UiState {
     pub fn new() -> Self {
-        let mut tree = Tree::new(vec![Window::GameView]);
+        let mut tree = Tree::new(vec![
+            Window::FrameBuffer(KinectFrameBufferName::default()),
+            Window::FrameBuffer(KinectFrameBufferName::CurrentDepth),
+            Window::FrameBuffer(KinectFrameBufferName::DerivedDepth),
+            Window::FrameBuffer(KinectFrameBufferName::CurrentPlayerIndex),
+            Window::FrameBuffer(KinectFrameBufferName::DerivedPlayerIndex),
+            Window::GameView,
+        ]);
         let [game, _inspector] = tree.split_right(NodeIndex::root(), 0.75, vec![Window::Inspector]);
         let [game, _hierarchy] =
             tree.split_left(game, 0.2, vec![Window::Hierarchy, Window::World, Window::WorldEntities]);
@@ -130,6 +144,7 @@ enum Window {
     Assets,
     Inspector,
     Controls,
+    FrameBuffer(KinectFrameBufferName),
 }
 
 struct TabViewer<'a> {
@@ -173,6 +188,33 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 }
             },
             Window::Controls => ui_controls(ui, self.world),
+            Window::FrameBuffer(frame_buffer_name) => {
+                ui.label(format!("{:?}", frame_buffer_name));
+                let (image_handle, texture_id) = self.world.resource_scope::<bevy_egui::EguiContext, _>(
+                    |world, mut egui_context: Mut<bevy_egui::EguiContext>| {
+                        get_or_create_frame_buffer_image_handle(world, frame_buffer_name, &mut egui_context)
+                    },
+                );
+                let (width, height) = self.world.resource_scope::<Assets<Image>, _>(|world, images| {
+                    let image = images.get(&image_handle).unwrap();
+                    let size = &image.texture_descriptor.size;
+                    (size.width as f32, size.height as f32)
+                });
+                let texture_size = Rect::from_points(&[Pos2::ZERO, Pos2::new(width, height)]);
+                let available_rect = ui.available_rect_before_wrap();
+                let image_size = if texture_size.aspect_ratio() > available_rect.aspect_ratio() {
+                    (
+                        available_rect.width(),
+                        available_rect.width() / texture_size.aspect_ratio(),
+                    )
+                } else {
+                    (
+                        available_rect.height() * texture_size.aspect_ratio(),
+                        available_rect.height(),
+                    )
+                };
+                ui.image(texture_id, image_size);
+            }
         }
     }
 
@@ -226,6 +268,37 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
             }
         }
     });
+}
+
+fn get_or_create_frame_buffer_image_handle(
+    world: &mut World,
+    buffer_name: &KinectFrameBufferName,
+    egui_context: &mut bevy_egui::EguiContext,
+) -> (Handle<Image>, egui::TextureId) {
+    if let Some(found) = world
+        .query::<&KinectFrameBufferImageHandle>()
+        .iter(world)
+        .find(|&KinectFrameBufferImageHandle(b, _)| b == buffer_name)
+    {
+        (found.1.clone(), egui_context.add_image(found.1.clone()))
+    } else {
+        info!("creating image resource for frame buffer {:?}", buffer_name);
+        let image_handle = world.resource_mut::<Assets<Image>>().add(Image::new_fill(
+            bevy_render::render_resource::Extent3d {
+                width: COLOR_WIDTH as u32,
+                height: COLOR_HEIGHT as u32,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            &[0, 0, 0, 255],
+            bevy_render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        ));
+        world.spawn((
+            Name::new(format!("auto:{:?}", buffer_name)),
+            KinectFrameBufferImageHandle(*buffer_name, image_handle.clone()),
+        ));
+        (image_handle.clone(), egui_context.add_image(image_handle))
+    }
 }
 
 // TODO: remove all the gizmo stuff from here?

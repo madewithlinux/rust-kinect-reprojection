@@ -25,7 +25,7 @@ impl Default for KinectPostProcessorConfig {
     }
 }
 
-#[derive(Component, Default, Reflect, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Component, Default, Debug, Reflect, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum KinectFrameBufferName {
     #[default]
     CurrentColor,
