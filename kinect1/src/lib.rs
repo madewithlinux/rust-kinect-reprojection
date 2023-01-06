@@ -484,6 +484,10 @@ fn frame_thread(sender: FrameMessageSender) -> KinectResult<()> {
             | NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA,
     )?;
 
+    let mut angle_degrees: std::ffi::c_long = 0;
+    try_call_method!(sensor.delegate, NuiCameraElevationGetAngle, &mut angle_degrees).unwrap();
+    dbg!(angle_degrees);
+
     unsafe {
         windows::Win32::System::Threading::ResetEvent(color_event);
         windows::Win32::System::Threading::ResetEvent(depth_event);

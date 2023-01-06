@@ -100,6 +100,7 @@ struct UiState {
 impl UiState {
     pub fn new() -> Self {
         let mut tree = Tree::new(vec![
+            Window::FrameBuffer(KinectFrameBufferName::PointCloud),
             Window::FrameBuffer(KinectFrameBufferName::default()),
             Window::FrameBuffer(KinectFrameBufferName::CurrentDepth),
             Window::FrameBuffer(KinectFrameBufferName::DerivedDepth),
@@ -108,10 +109,18 @@ impl UiState {
             Window::GameView,
         ]);
         let [game, _inspector] = tree.split_right(NodeIndex::root(), 0.75, vec![Window::Inspector]);
-        let [game, _hierarchy] =
-            tree.split_left(game, 0.2, vec![Window::Hierarchy, Window::World, Window::WorldEntities]);
-        let [_game, bottom] = tree.split_below(game, 0.8, vec![Window::Resources, Window::Assets]);
-        let [_bottom, _bottom_controls] = tree.split_right(bottom, 0.8, vec![Window::Controls]);
+        let [_game, hierarchy] = tree.split_left(
+            game,
+            0.2,
+            vec![
+                Window::World,
+                Window::Hierarchy,
+                Window::WorldEntities,
+                Window::Resources,
+                Window::Assets,
+            ],
+        );
+        let [_bottom, _controls] = tree.split_below(hierarchy, 0.8, vec![Window::Controls]);
 
         Self {
             tree,

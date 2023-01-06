@@ -1,7 +1,13 @@
-use bevy::prelude::*;
+use std::f32::consts::PI;
+
+use array2d::Array2D;
+use bevy::{math::Affine3A, prelude::*};
 
 use image::{Rgb, RgbImage};
-use kinect1::{start_frame_thread, FrameMessageReceiver, Gray16Image, KinectFrameMessage, NUI_IMAGE_DEPTH_NO_VALUE};
+use kinect1::{
+    start_frame_thread, FrameMessageReceiver, Gray16Image, KinectFrameMessage, NuiDepthPixelToDepth,
+    NUI_IMAGE_DEPTH_NO_VALUE,
+};
 
 use crate::{
     frame_visualization_util::{color_frame_to_pixels, depth_frame_to_pixels, player_index_frame_to_pixels},
@@ -15,12 +21,14 @@ pub struct KinectReceiver(pub FrameMessageReceiver);
 pub struct KinectPostProcessorConfig {
     pub history_buffer_size: usize,
     pub depth_threshold: f32,
+    pub sensor_tilt_angle_deg: f32,
 }
 impl Default for KinectPostProcessorConfig {
     fn default() -> Self {
         Self {
             history_buffer_size: 2,
             depth_threshold: 100.0,
+            sensor_tilt_angle_deg: -33.0,
         }
     }
 }
@@ -36,6 +44,7 @@ pub enum KinectFrameBufferName {
     DepthBaseline,
     ActiveDepth,
     ActiveColor,
+    PointCloud,
 }
 
 #[derive(Component)]
@@ -46,6 +55,7 @@ pub struct KinectFrameBuffers {
     pub depth_baseline_frame: Gray16Image,
     pub active_depth: Gray16Image,
     pub active_color: RgbImage,
+    pub point_cloud: Array2D<Vec3>,
     // non-viewable data
     pub frame_history: std::collections::VecDeque<KinectFrameMessage>,
 }
@@ -65,6 +75,7 @@ impl Default for KinectFrameBuffers {
             depth_baseline_frame: depth_frame.clone(),
             active_depth: depth_frame.clone(),
             active_color: color_frame.clone(),
+            point_cloud: Array2D::filled_with(Vec3::default(), COLOR_HEIGHT, COLOR_WIDTH),
             frame_history: Default::default(),
         }
     }
@@ -81,6 +92,18 @@ impl KinectFrameBuffers {
             KinectFrameBufferName::ActiveColor => color_frame_to_pixels(&self.active_color),
             KinectFrameBufferName::CurrentPlayerIndex => player_index_frame_to_pixels(&self.current_frame.depth_frame),
             KinectFrameBufferName::DerivedPlayerIndex => player_index_frame_to_pixels(&self.derived_frame.depth_frame),
+            KinectFrameBufferName::PointCloud => self
+                .point_cloud
+                .elements_row_major_iter()
+                .flat_map(|v| {
+                    [
+                        (v.x.abs() % 256.0) as u8,
+                        (v.y.abs() % 256.0) as u8,
+                        (v.z.abs() % 256.0) as u8,
+                        255u8,
+                    ]
+                })
+                .collect(),
         }
     }
 }
@@ -91,11 +114,11 @@ fn receive_kinect_current_frame(
 ) {
     if let Ok(received_frame) = receiver.0.try_recv() {
         let (config, mut buffers) = current_frame_query.single_mut();
-        receive_and_process_frame(received_frame, config, &mut buffers);
+        process_received_frame(received_frame, config, &mut buffers);
     }
 }
 
-fn receive_and_process_frame(
+fn process_received_frame(
     received_frame: KinectFrameMessage,
     config: &KinectPostProcessorConfig,
     buffers: &mut KinectFrameBuffers,
@@ -138,6 +161,29 @@ fn receive_and_process_frame(
             Rgb([0, 0, 0])
         }
     }
+
+    for (i, j, depth_luma) in buffers.derived_frame.depth_frame.enumerate_pixels() {
+        let xyz = convert_depth_to_xyz(
+            DEPTH_WIDTH as f32,
+            DEPTH_HEIGHT as f32,
+            i as f32,
+            j as f32,
+            NuiDepthPixelToDepth(depth_luma.0[0]) as f32,
+        );
+        // TODO: use a real correction factor instead of this
+        let xyz = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0).transform_vector3(xyz);
+        buffers.point_cloud[(j as usize, i as usize)] = xyz;
+    }
+}
+
+pub fn convert_depth_to_xyz(w: f32, h: f32, i: f32, j: f32, depth_in_mm: f32) -> Vec3 {
+    // ref https://openkinect.org/wiki/Imaging_Information
+    let z = depth_in_mm;
+    let min_distance = -10.0;
+    let scale_factor = 0.0021;
+    let x = (i - w / 2.0) * (z + min_distance) * scale_factor;
+    let y = (j - h / 2.0) * (z + min_distance) * scale_factor;
+    Vec3::new(x, y, z)
 }
 
 pub fn load_baseline_frame(path: impl AsRef<std::path::Path>) -> Result<Gray16Image, image::ImageError> {
