@@ -1,9 +1,8 @@
 use array2d::Array2D;
 use bevy::prelude::*;
-use image::{Rgb, RgbImage};
-use kinect1::{depth_to_rgb_color, Gray16Image, NuiDepthPixelToPlayerIndex};
+use bytemuck::cast_slice_mut;
 
-use crate::{receiver::KinectFrameBuffers, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
+use crate::{receiver::KinectFrameBuffers, DEPTH_HEIGHT, DEPTH_WIDTH};
 
 #[derive(Component, Default, Debug, Reflect, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FrameBufferDescriptor {
@@ -20,18 +19,19 @@ pub enum FrameBufferDescriptor {
 }
 
 fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, image_data: &mut [u8]) {
+    let image_data = cast_slice_mut::<_, [u8; 4]>(image_data);
     match descriptor {
-        FrameBufferDescriptor::CurrentColor => color_frame_to_pixels(&buffers.current_frame.color_frame, image_data),
-        FrameBufferDescriptor::CurrentDepth => depth_frame_to_pixels(&buffers.current_frame.depth_frame, image_data),
-        FrameBufferDescriptor::DerivedDepth => depth_frame_to_pixels(&buffers.derived_frame.depth_frame, image_data),
+        FrameBufferDescriptor::CurrentColor => color_frame_to_pixels(&buffers.current_frame.rgba, image_data),
+        FrameBufferDescriptor::CurrentDepth => depth_frame_to_pixels(&buffers.current_frame.depth, image_data),
+        FrameBufferDescriptor::DerivedDepth => depth_frame_to_pixels(&buffers.derived_frame.depth, image_data),
         FrameBufferDescriptor::DepthBaseline => depth_frame_to_pixels(&buffers.depth_baseline_frame, image_data),
         FrameBufferDescriptor::ActiveDepth => depth_frame_to_pixels(&buffers.active_depth, image_data),
         FrameBufferDescriptor::ActiveColor => color_frame_to_pixels(&buffers.active_color, image_data),
         FrameBufferDescriptor::CurrentPlayerIndex => {
-            player_index_frame_to_pixels(&buffers.current_frame.depth_frame, image_data)
+            player_index_frame_to_pixels(&buffers.current_frame.player_index, image_data)
         }
         FrameBufferDescriptor::DerivedPlayerIndex => {
-            player_index_frame_to_pixels(&buffers.derived_frame.depth_frame, image_data)
+            player_index_frame_to_pixels(&buffers.derived_frame.player_index, image_data)
         }
         FrameBufferDescriptor::PointCloud => point_cloud_to_pixels(&buffers.point_cloud, image_data),
     }
@@ -46,69 +46,56 @@ pub fn update_framebuffer_images(
     mut images: ResMut<Assets<Image>>,
 ) {
     let buffers = buffers.single();
-    if buffers.derived_frame.depth_frame.len() == 0 {
+    if buffers.derived_frame.depth.len() == 0 {
         return;
     }
 
     for FrameBufferImageHandle(buffer_name, handle) in frame_buffer_handle_query.iter() {
         if let Some(image) = images.get_mut(&handle) {
-            // image.data = get_buffer(buffer_name, buffers);
             get_buffer(buffer_name, buffers, &mut image.data);
         }
     }
 }
 
-fn color_frame_to_pixels(color_frame: &RgbImage, image_data: &mut [u8]) {
-    assert_eq!(image_data.len(), COLOR_HEIGHT * COLOR_WIDTH * 4);
-    for (i, &pixel) in color_frame.pixels().enumerate() {
-        image_data[4 * i + 0] = pixel.0[0];
-        image_data[4 * i + 1] = pixel.0[1];
-        image_data[4 * i + 2] = pixel.0[2];
-        image_data[4 * i + 3] = 255;
-    }
+fn color_frame_to_pixels(color_frame: &[[u8; 4]], image_data: &mut [[u8; 4]]) {
+    image_data.copy_from_slice(color_frame);
 }
 
-fn depth_frame_to_pixels(depth_frame: &Gray16Image, image_data: &mut [u8]) {
-    assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH * 4);
+fn depth_frame_to_pixels(depth_frame: &[u16], image_data: &mut [[u8; 4]]) {
+    assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH);
     for (i, &depth) in depth_frame.iter().enumerate() {
-        let Rgb([r, g, b]) = depth_to_rgb_color(depth);
-        image_data[4 * i + 0] = r;
-        image_data[4 * i + 1] = g;
-        image_data[4 * i + 2] = b;
-        image_data[4 * i + 3] = 255;
+        let depth = depth << 3;
+        image_data[i] = [(depth % 256) as u8, (depth / 256) as u8, 0, 255];
     }
 }
 
-fn point_cloud_to_pixels(point_cloud: &Array2D<Vec3>, image_data: &mut [u8]) {
-    assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH * 4);
+fn point_cloud_to_pixels(point_cloud: &Array2D<Vec3>, image_data: &mut [[u8; 4]]) {
+    assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH);
     for (i, v) in point_cloud.elements_row_major_iter().enumerate() {
-        image_data[4 * i + 0] = (v.x.abs() % 256.0) as u8;
-        image_data[4 * i + 1] = (v.y.abs() % 256.0) as u8;
-        image_data[4 * i + 2] = (v.z.abs() % 256.0) as u8;
-        image_data[4 * i + 3] = 255;
+        image_data[i] = [
+            (v.x.abs() % 256.0) as u8,
+            (v.y.abs() % 256.0) as u8,
+            (v.z.abs() % 256.0) as u8,
+            255,
+        ];
     }
 }
 
-fn player_index_frame_to_pixels(depth_frame: &Gray16Image, image_data: &mut [u8]) {
-    assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH * 4);
+fn player_index_frame_to_pixels(player_index_frame: &[u8], image_data: &mut [[u8; 4]]) {
+    assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH);
     let player_colors = &[
-        (255, 0, 0),
-        (0, 255, 0),
-        (0, 0, 255),
-        (0, 255, 255),
-        (255, 255, 0),
-        (255, 0, 0),
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [0, 255, 255, 255],
+        [255, 255, 0, 255],
+        [255, 0, 0, 255],
     ];
-    for (i, &depth) in depth_frame.iter().enumerate() {
-        let player_index = NuiDepthPixelToPlayerIndex(depth);
-        let (r, g, b) = if player_index == 0 {
-            (0, 0, 0)
+    for (i, &player_index) in player_index_frame.iter().enumerate() {
+        image_data[i] = if player_index == 0 {
+            [0, 0, 0, 255]
         } else {
             player_colors[(player_index as usize) % player_colors.len()]
         };
-        image_data[4 * i + 0] = r;
-        image_data[4 * i + 1] = g;
-        image_data[4 * i + 2] = b;
-        image_data[4 * i + 3] = 255;
     }
 }

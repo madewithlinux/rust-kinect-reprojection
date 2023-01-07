@@ -12,6 +12,7 @@ use bevy_render::camera::{CameraProjection, Viewport};
 use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
+use image::{ImageBuffer, Luma};
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
 use crate::receiver::{load_baseline_frame, KinectFrameBuffers};
@@ -248,11 +249,10 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
 
     ui.vertical(|ui| {
         if ui.button("save depth frame").clicked() {
-            let depth_frame = world
+            let current_frame = world
                 .query::<&crate::receiver::KinectFrameBuffers>()
                 .single(world)
                 .current_frame
-                .depth_frame
                 .clone();
             pool.spawn(async move {
                 info!("saving depth frame");
@@ -264,6 +264,12 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
                         info!("file chooser cancelled");
                         return
                     };
+                let depth_frame: ImageBuffer<Luma<u16>, Vec<u16>> = ImageBuffer::from_vec(
+                    current_frame.width as u32,
+                    current_frame.height as u32,
+                    current_frame.depth,
+                )
+                .unwrap();
                 depth_frame.save(&depth_filename).unwrap();
                 info!("saved {:?}", &depth_filename);
             })

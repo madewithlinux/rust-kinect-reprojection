@@ -3,11 +3,8 @@ use std::f32::consts::PI;
 use array2d::Array2D;
 use bevy::{math::Affine3A, prelude::*};
 
-use image::{Rgb, RgbImage};
-use kinect1::{
-    start_frame_thread, FrameMessageReceiver, Gray16Image, KinectFrameMessage, NuiDepthPixelToDepth,
-    NUI_IMAGE_DEPTH_NO_VALUE, worker_v2::start_frame_thread2,
-};
+use itertools::Itertools;
+use kinect1::worker_v2::{start_frame_thread2, FrameMessage, FrameMessageReceiver};
 
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
 
@@ -38,23 +35,31 @@ impl Default for KinectPostProcessorConfig {
 #[derive(Component)]
 pub struct KinectFrameBuffers {
     // viewable buffers
-    pub current_frame: KinectFrameMessage,
-    pub derived_frame: KinectFrameMessage,
-    pub depth_baseline_frame: Gray16Image,
-    pub active_depth: Gray16Image,
-    pub active_color: RgbImage,
+    pub current_frame: FrameMessage,
+    pub derived_frame: FrameMessage,
+    pub depth_baseline_frame: Vec<u16>,
+    pub active_depth: Vec<u16>,
+    pub active_color: Vec<[u8; 4]>,
     pub point_cloud: Array2D<Vec3>,
     // non-viewable data
-    pub frame_history: std::collections::VecDeque<KinectFrameMessage>,
+    pub frame_history: std::collections::VecDeque<FrameMessage>,
 }
 
 impl Default for KinectFrameBuffers {
     fn default() -> Self {
-        let color_frame = RgbImage::new(COLOR_WIDTH as u32, COLOR_HEIGHT as u32);
-        let depth_frame = Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32);
-        let frame_message = KinectFrameMessage {
-            color_frame: color_frame.clone(),
-            depth_frame: depth_frame.clone(),
+        let width = COLOR_WIDTH;
+        let height = COLOR_HEIGHT;
+        let color_frame = vec![Default::default(); width * height];
+        let depth_frame = vec![Default::default(); width * height];
+        let player_index = vec![Default::default(); width * height];
+        let frame_message = FrameMessage {
+            width,
+            height,
+            rgba: color_frame.clone(),
+            depth: depth_frame.clone(),
+            player_index: player_index.clone(),
+            color_frame_info: Default::default(),
+            depth_frame_info: Default::default(),
             ..Default::default()
         };
         Self {
@@ -80,19 +85,20 @@ fn receive_kinect_current_frame(
 }
 
 fn process_received_frame(
-    received_frame: KinectFrameMessage,
+    received_frame: FrameMessage,
     config: &KinectPostProcessorConfig,
     buffers: &mut KinectFrameBuffers,
 ) {
     buffers.current_frame = received_frame.clone();
     buffers.derived_frame = received_frame.clone();
     for historic_frame in buffers.frame_history.iter() {
-        for (i, depth) in historic_frame.depth_frame.iter().enumerate() {
-            if depth == &NUI_IMAGE_DEPTH_NO_VALUE {
+        for (i, &depth) in historic_frame.depth.iter().enumerate() {
+            if depth == 0 {
                 continue;
             }
-            if buffers.derived_frame.depth_frame.get(i) == Some(&NUI_IMAGE_DEPTH_NO_VALUE) {
-                *buffers.derived_frame.depth_frame.get_mut(i).unwrap() = *depth;
+            if buffers.derived_frame.depth[i] == 0 {
+                buffers.derived_frame.depth[i] = depth;
+                buffers.derived_frame.player_index[i] = historic_frame.player_index[i];
             }
         }
     }
@@ -107,13 +113,15 @@ fn process_received_frame(
 
     // TODO: use a real correction factor instead of this
     let point_transform = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0);
-    for (i, j, depth_luma) in buffers.derived_frame.depth_frame.enumerate_pixels() {
+    for (index, &depth) in buffers.derived_frame.depth.iter().enumerate() {
+        let i = index % buffers.derived_frame.width;
+        let j = index / buffers.derived_frame.width;
         let xyz = convert_depth_to_xyz(
             DEPTH_WIDTH as f32,
             DEPTH_HEIGHT as f32,
             i as f32,
             j as f32,
-            NuiDepthPixelToDepth(depth_luma.0[0]) as f32,
+            depth as f32,
         );
         let xyz = point_transform.transform_vector3(xyz);
         buffers.point_cloud[(j as usize, i as usize)] = xyz;
@@ -124,23 +132,22 @@ pub fn baseline_threshold_background_removal(config: &KinectPostProcessorConfig,
     // subtract depth using depth threshold
     let depth_threshold = config.depth_threshold as u16;
 
-    for (i, current_depth) in buffers.derived_frame.depth_frame.iter().enumerate() {
-        let baseline_depth = buffers.depth_baseline_frame.get(i).unwrap();
-        *buffers.active_depth.get_mut(i).unwrap() = match (current_depth, baseline_depth) {
-            (&NUI_IMAGE_DEPTH_NO_VALUE, _) => 0u16,
-            (&value, &NUI_IMAGE_DEPTH_NO_VALUE) => value,
-            (&value, &baseline) if value < baseline && (value + depth_threshold) < baseline => value,
+    for (i, &current_depth) in buffers.derived_frame.depth.iter().enumerate() {
+        let baseline_depth = buffers.depth_baseline_frame[i];
+        buffers.active_depth[i] = match (current_depth, baseline_depth) {
+            (0, _) => 0u16,
+            (value, 0) => value,
+            (value, baseline) if value < baseline && (value + depth_threshold) < baseline => value,
             _ => 0u16,
         };
     }
 
-    for (x, y, pixel) in buffers.active_color.enumerate_pixels_mut() {
-        let depth = buffers.active_depth.get_pixel(x, y).0[0];
-        *pixel = if depth != NUI_IMAGE_DEPTH_NO_VALUE {
-            *buffers.derived_frame.color_frame.get_pixel(x, y)
+    for (i, &depth) in buffers.active_depth.iter().enumerate() {
+        buffers.active_color[i] = if depth != 0 {
+            buffers.current_frame.rgba[i]
         } else {
-            Rgb([0, 0, 0])
-        }
+            [0, 0, 0, 255]
+        };
     }
 }
 
@@ -154,14 +161,16 @@ pub fn convert_depth_to_xyz(w: f32, h: f32, i: f32, j: f32, depth_in_mm: f32) ->
     Vec3::new(x, y, z)
 }
 
-pub fn load_baseline_frame(path: impl AsRef<std::path::Path>) -> Result<Gray16Image, image::ImageError> {
-    image::open(path).map(|img| img.into_luma16())
+pub fn load_baseline_frame(path: impl AsRef<std::path::Path>) -> Result<Vec<u16>, image::ImageError> {
+    image::open(path).map(|img| img.into_luma16().iter().cloned().collect_vec())
 }
-pub fn try_load_baseline_frame(path: impl AsRef<std::path::Path>) -> Gray16Image {
-    image::open(path).map(|img| img.into_luma16()).unwrap_or_else(|_| {
-        info!("failed to load depth baseline frame");
-        Gray16Image::new(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32)
-    })
+pub fn try_load_baseline_frame(path: impl AsRef<std::path::Path>) -> Vec<u16> {
+    image::open(path)
+        .map(|img| img.into_luma16().iter().cloned().collect_vec())
+        .unwrap_or_else(|_| {
+            info!("failed to load depth baseline frame");
+            vec![0; DEPTH_WIDTH * DEPTH_HEIGHT]
+        })
 }
 
 fn setup_kinect_receiver(world: &mut World) {

@@ -3,11 +3,8 @@ use std::f32::consts::PI;
 use bevy::{math::Affine3A, prelude::*};
 use bevy_aabb_instancing::{ColorOptions, ColorOptionsMap, Cuboid, Cuboids, VertexPullingRenderPlugin, COLOR_MODE_RGB};
 use bevy_render::primitives::Aabb;
-use image::{Luma, Rgb};
+
 use itertools::{iproduct, Itertools};
-use kinect1::Gray16Image;
-use kinect1::NuiDepthPixelToDepth;
-use kinect1::NUI_DEPTH_DEPTH_UNKNOWN_VALUE;
 use smooth_bevy_cameras::{
     controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin},
     LookTransformPlugin,
@@ -59,7 +56,6 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
     const PATCH_SIZE: usize = 150;
     const SCENE_RADIUS: f32 = 1500.0;
 
-    let mut current_flat_index = 0;
     for y_batch in (0..DEPTH_HEIGHT).step_by(PATCH_SIZE) {
         for x_batch in (0..DEPTH_WIDTH).step_by(PATCH_SIZE) {
             let mut instances = Vec::with_capacity(PATCH_SIZE * PATCH_SIZE);
@@ -69,10 +65,8 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
                     indexes.push(BufferIndex {
                         x: x as u32,
                         y: y as u32,
-                        // FIXME: this flat index is totally wrong
-                        flat_index: current_flat_index,
+                        flat_index: x + y * DEPTH_WIDTH,
                     });
-                    current_flat_index += 1;
 
                     let x = x as f32 - SCENE_RADIUS;
                     let z = y as f32 - SCENE_RADIUS;
@@ -112,13 +106,6 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
         .insert(MainCamera);
 }
 
-// fn update_scalar_hue_options(time: Res<Time>, mut color_options_map: ResMut<ColorOptionsMap>) {
-//     let options = color_options_map.get_mut(ColorOptionsId(1));
-//     let tv = 1000.0 * (time.elapsed_seconds().sin() + 1.0);
-//     // options.scalar_hue.max_visible = tv;
-//     options.scalar_hue.clamp_max = tv;
-// }
-
 fn update_cuboid_position_color(
     // buffers: Query<&KinectFrameBuffers>,
     data_source_query: Query<(&KinectPostProcessorConfig, &KinectFrameBuffers)>,
@@ -134,14 +121,12 @@ fn update_cuboid_position_color(
         assert_eq!(buffer_indexes.indexes.len(), cuboids.instances.len());
         for (i, &BufferIndex { x, y, flat_index }) in buffer_indexes.indexes.iter().enumerate() {
             // set color
-            let &Rgb([r, g, b]) = buffers.current_frame.color_frame.get_pixel(x, y);
+            let [r, g, b, _a] = buffers.current_frame.rgba[flat_index];
             cuboids.instances[i].color = u32::from_le_bytes([r, g, b, 255]);
 
             // set position
-            // let pixel_pos = *buffers.point_cloud.get_row_major(flat_index).unwrap();
-            // let pixel_pos = *buffers.point_cloud.get(y as usize, x as usize).unwrap();
-            let &Luma([packed_depth]) = buffers.derived_frame.depth_frame.get_pixel(x, y);
-            if packed_depth == NUI_DEPTH_DEPTH_UNKNOWN_VALUE {
+            let depth = buffers.derived_frame.depth[flat_index];
+            if depth == 0 {
                 cuboids.instances[i].minimum = Vec3::ZERO;
                 cuboids.instances[i].maximum = Vec3::splat(1.0);
             } else {
@@ -150,21 +135,22 @@ fn update_cuboid_position_color(
                     DEPTH_HEIGHT as f32,
                     x as f32,
                     (DEPTH_HEIGHT as u32 - y) as f32,
-                    NuiDepthPixelToDepth(packed_depth) as f32,
+                    depth as f32,
                 );
                 let neighbor_pos = convert_depth_to_xyz(
                     DEPTH_WIDTH as f32,
                     DEPTH_HEIGHT as f32,
                     (x + 1) as f32,
                     (DEPTH_HEIGHT as u32 - y + 1) as f32,
-                    NuiDepthPixelToDepth(packed_depth) as f32,
+                    depth as f32,
                 );
                 let pixel_pos = point_transform.transform_vector3(pixel_pos);
                 let neighbor_pos = point_transform.transform_vector3(neighbor_pos);
-                // const POINT_WIDTH: f32 = 1.0;
                 let point_width = pixel_pos.distance(neighbor_pos) / 2.0;
                 // let point_cuboid_depth: f32 = 50.0;
-                let point_cuboid_depth: f32 = adjacent_depth_difference(&buffers.derived_frame.depth_frame, x, y);
+                // let point_cuboid_depth: f32 = point_width;
+                let point_cuboid_depth: f32 =
+                    adjacent_depth_difference(&buffers.derived_frame.depth, x as usize, y as usize, point_width, 250.0);
                 let min = pixel_pos - Vec3::new(point_width, point_width, point_cuboid_depth);
                 let max = pixel_pos + Vec3::new(point_width, point_width, 0.0);
                 cuboids.instances[i].minimum = min;
@@ -175,27 +161,24 @@ fn update_cuboid_position_color(
     }
 }
 
-fn adjacent_depth_difference(depth_frame: &Gray16Image, x: u32, y: u32) -> f32 {
-    let &Luma([packed_depth]) = depth_frame.get_pixel(x, y);
-    let depth = NuiDepthPixelToDepth(packed_depth) as f32;
+fn adjacent_depth_difference(depth_frame: &Vec<u16>, x: usize, y: usize, min: f32, max: f32) -> f32 {
+    let depth = depth_frame[x + y * DEPTH_WIDTH] as f32;
     let (min_depth, _max_depth) = {
         let x = x as i32;
         let y = y as i32;
         iproduct!((x - 1)..=(x + 1), (y - 1)..=(y + 1))
             .filter(|&(i, j)| i >= 0 && i < (DEPTH_WIDTH as i32) && j >= 0 && j < (DEPTH_HEIGHT as i32))
-            .map(|(i, j)| depth_frame.get_pixel(i as u32, j as u32).0[0])
-            .filter(|&pd| pd > 0)
-            .filter(|&pd| pd != NUI_DEPTH_DEPTH_UNKNOWN_VALUE)
-            .map(|pd| NuiDepthPixelToDepth(pd) as f32)
+            .map(|(i, j)| depth_frame[(i as usize) + (j as usize) * DEPTH_WIDTH] as f32)
+            .filter(|&pd| pd > 0.0)
             .minmax()
             .into_option()
             .unwrap_or((depth, depth))
     };
     let adj_depth = depth - min_depth;
-    if adj_depth < 5.0 {
-        5.0
-    } else if adj_depth > 100.0 {
-        100.0
+    if adj_depth < min {
+        min
+    } else if adj_depth > max {
+        max
     } else {
         adj_depth
     }

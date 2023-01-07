@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     println!("Hello, world!");
     dbg!(get_sensor_count().unwrap());
 
-    let receiver = start_frame_thread2();
+    let receiver = start_frame_thread();
 
     // let rgb_output_dir = PathBuf::from("data/rgb_frames/");
     // create_dir_all(&rgb_output_dir)?;

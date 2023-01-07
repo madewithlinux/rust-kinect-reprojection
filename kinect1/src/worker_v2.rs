@@ -1,13 +1,12 @@
 use std::ptr::null_mut;
 
 use bytemuck::cast_slice;
-use image::RgbImage;
+
 use kinect1_sys::{
     INuiCoordinateMapper, INuiFrameTexture, INuiSensor, NuiCreateSensorByIndex, NuiDepthPixelToDepth,
     NuiDepthPixelToPlayerIndex, NUI_COLOR_IMAGE_POINT, NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME,
-    NUI_IMAGE_PLAYER_INDEX_SHIFT, NUI_IMAGE_RESOLUTION, NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA,
-    NUI_INITIALIZE_FLAG_USES_COLOR, NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX, NUI_INITIALIZE_FLAG_USES_SKELETON,
-    NUI_LOCKED_RECT,
+    NUI_IMAGE_RESOLUTION, NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA, NUI_INITIALIZE_FLAG_USES_COLOR,
+    NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX, NUI_INITIALIZE_FLAG_USES_SKELETON, NUI_LOCKED_RECT,
 };
 use tracing::info;
 use windows::Win32::{
@@ -16,9 +15,9 @@ use windows::Win32::{
 };
 
 use crate::{
-    call_method, check_fail, convert_resolution_to_size, try_call_method, vtable_method, FrameMessageReceiver,
-    Gray16Image, ImageFrameInfo, KinectFrameMessage, MAX_ALLOWED_ELAPSED_TIME, NUI_IMAGE_RESOLUTION_640X480,
-    NUI_IMAGE_TYPE_COLOR, NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX,
+    call_method, check_fail, convert_resolution_to_size, try_call_method, vtable_method, ImageFrameInfo,
+    MAX_ALLOWED_ELAPSED_TIME, NUI_IMAGE_RESOLUTION_640X480, NUI_IMAGE_TYPE_COLOR,
+    NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +76,10 @@ impl Default for ReceiverThreadArgs {
 #[derive(Debug)]
 pub struct ReceiverThreadData {
     args: ReceiverThreadArgs,
+    color_width: usize,
+    color_height: usize,
+    depth_width: usize,
+    depth_height: usize,
 
     sensor: *mut INuiSensor,
 
@@ -121,6 +124,11 @@ impl ReceiverThreadData {
 
         let mut out = Self {
             args,
+            color_width,
+            color_height,
+            depth_width,
+            depth_height,
+
             sensor: null_mut(),
 
             color_stream_handle: null_mut(),
@@ -286,7 +294,6 @@ impl ReceiverThreadData {
                 &mut near_mode,
                 &mut frame_texture
             );
-            // TODO: use extended frame texture to get the extended depth range data
             call_method!(frame_texture, LockRect, 0, &mut self.depth_locked_rect, null_mut(), 0);
             let input_slice_u8 = unsafe {
                 std::slice::from_raw_parts(self.depth_locked_rect.pBits, self.depth_locked_rect.size as usize)
@@ -361,35 +368,26 @@ impl ReceiverThreadData {
         self.have_depth_data = true;
     }
 
-    pub fn wait_and_receive_next_frame(&mut self) -> KinectFrameMessage {
+    pub fn wait_and_receive_next_frame(&mut self) -> FrameMessage {
+        let width = self.color_width;
+        let height = self.color_height;
+        self.processed_rgba.resize(width * height, Default::default());
+        self.processed_depth.resize(width * height, Default::default());
+        self.processed_player_index.resize(width * height, Default::default());
+
         // TODO: should we allow sending frames that are partial duplicates?
         let mut have_new_rgba_data = false;
         let mut have_new_depth_data = false;
-        // TODO: return a better value than this, so that we don't have to map to the other data type
-        let (color_width, color_height) = self.args.get_color_size();
-        let (depth_width, depth_height) = self.args.get_depth_size();
-        let mut processed_rgb = Vec::with_capacity(color_width * color_height * 3);
-        let mut packed_depth_frame = vec![0u16; depth_width * depth_height];
 
         loop {
             unsafe { WaitForMultipleObjects(&[self.color_next_frame_event, self.depth_next_frame_event], false, 100) };
 
             if unsafe { WaitForSingleObject(self.color_next_frame_event, 0) } == WAIT_OBJECT_0 {
                 self.receive_color_frame();
-                processed_rgb.clear();
-                for &[r, g, b, _a] in self.processed_rgba.iter() {
-                    processed_rgb.push(r);
-                    processed_rgb.push(g);
-                    processed_rgb.push(b);
-                }
                 have_new_rgba_data = true;
             }
             if unsafe { WaitForSingleObject(self.depth_next_frame_event, 0) } == WAIT_OBJECT_0 {
                 self.receive_depth_frame();
-                for i in 0..packed_depth_frame.len() {
-                    packed_depth_frame[i] = (self.processed_depth[i] << NUI_IMAGE_PLAYER_INDEX_SHIFT)
-                        | (self.processed_player_index[i] as u16);
-                }
                 have_new_depth_data = true;
             }
 
@@ -406,14 +404,32 @@ impl ReceiverThreadData {
             }
         }
 
-        KinectFrameMessage {
-            color_frame: RgbImage::from_vec(color_width as u32, color_height as u32, processed_rgb).unwrap(),
-            depth_frame: Gray16Image::from_vec(depth_width as u32, depth_height as u32, packed_depth_frame).unwrap(),
+        FrameMessage {
+            width,
+            height,
+            // these will be re-initialized for the next frame
+            rgba: std::mem::take(&mut self.processed_rgba),
+            depth: std::mem::take(&mut self.processed_depth),
+            player_index: std::mem::take(&mut self.processed_player_index),
             color_frame_info: self.color_frame_info,
             depth_frame_info: self.depth_frame_info,
         }
     }
 }
+
+#[derive(Clone, Default)]
+pub struct FrameMessage {
+    pub width: usize,
+    pub height: usize,
+    pub rgba: Vec<[u8; 4]>,
+    pub depth: Vec<u16>,
+    pub player_index: Vec<u8>,
+    // raw fields from the kinect itself
+    pub color_frame_info: ImageFrameInfo,
+    pub depth_frame_info: ImageFrameInfo,
+}
+
+pub type FrameMessageReceiver = crossbeam::channel::Receiver<FrameMessage>;
 
 pub fn start_frame_thread2() -> FrameMessageReceiver {
     let args = ReceiverThreadArgs::default();
@@ -424,7 +440,7 @@ pub fn start_frame_thread2() -> FrameMessageReceiver {
             let frame_message = thread_data.wait_and_receive_next_frame();
             match sender.send(frame_message) {
                 Ok(_) => (),
-                Err(e) => info!("v2: frame receiver hung up, {}", e),
+                Err(e) => info!("frame receiver hung up, {}", e),
             }
         }
     });
