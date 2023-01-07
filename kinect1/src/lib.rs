@@ -57,6 +57,7 @@ pub use kinect1_sys::{
 };
 
 use thiserror::Error;
+use tracing::info;
 use windows::Win32::{
     Foundation::WAIT_OBJECT_0,
     System::Threading::{WaitForMultipleObjects, WaitForSingleObject},
@@ -64,6 +65,7 @@ use windows::Win32::{
 use winresult::{HResult, HResultError};
 
 mod hresult_helper;
+pub mod worker_v2;
 
 #[derive(Error, Debug)]
 pub enum KinectError {
@@ -108,6 +110,20 @@ pub struct ImageFrameInfo {
     pub resolution: NUI_IMAGE_RESOLUTION,
     pub frame_flags: u32,
 }
+impl ImageFrameInfo {
+    fn from_image_frame(frame: &NUI_IMAGE_FRAME) -> Self {
+        let (width, height) = convert_resolution_to_size(frame.eResolution);
+        Self {
+            width,
+            height,
+            timestamp: frame.liTimeStamp,
+            frame_number: frame.dwFrameNumber,
+            image_type: frame.eImageType,
+            resolution: frame.eResolution,
+            frame_flags: frame.dwFrameFlags,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Sensor {
@@ -119,6 +135,8 @@ macro_rules! vtable_method {
         (*$mut_ref_self).lpVtbl.as_mut().unwrap().$method_name.unwrap()
     };
 }
+pub(crate) use vtable_method;
+
 macro_rules! try_call_method {
     ($self:expr, $method_name:ident) => (
         unsafe {
@@ -134,6 +152,18 @@ macro_rules! try_call_method {
         }
     );
 }
+pub(crate) use try_call_method;
+
+macro_rules! call_method {
+    ($self:expr, $method_name:ident) => (
+            try_call_method!($self, $method_name).unwrap()
+    );
+    ($self:expr, $method_name:ident, $($args:expr),+) => (
+            try_call_method!($self, $method_name, $($args),+).unwrap()
+
+    );
+}
+pub(crate) use call_method;
 
 impl Sensor {
     pub fn create_sensor_by_index(index: i32) -> KinectResult<Sensor> {
@@ -486,7 +516,7 @@ fn frame_thread(sender: FrameMessageSender) -> KinectResult<()> {
 
     let mut angle_degrees: std::ffi::c_long = 0;
     try_call_method!(sensor.delegate, NuiCameraElevationGetAngle, &mut angle_degrees).unwrap();
-    dbg!(angle_degrees);
+    info!("camera angle: {}", angle_degrees);
 
     unsafe {
         windows::Win32::System::Threading::ResetEvent(color_event);
@@ -559,7 +589,7 @@ fn frame_thread(sender: FrameMessageSender) -> KinectResult<()> {
             depth_frame_info: current_depth_frame_info,
         }) {
             Ok(_) => (),
-            Err(_) => println!("frame receiver hung up"),
+            Err(e) => info!("frame receiver hung up, {}", e),
         }
     }
 }

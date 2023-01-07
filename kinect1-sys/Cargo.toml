@@ -5,7 +5,7 @@ edition = "2021"
 links = "Kinect10"
 
 [dependencies]
-
+bytemuck = "1.12.3"
 
 [build-dependencies]
 bindgen = "0.63.0"

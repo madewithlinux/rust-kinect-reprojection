@@ -2463,6 +2463,7 @@ dependencies = [
  "itertools",
  "kinect1-sys",
  "thiserror",
+ "tracing",
  "windows 0.43.0",
  "winresult",
 ]
@@ -2472,6 +2473,7 @@ name = "kinect1-sys"
 version = "0.1.0"
 dependencies = [
  "bindgen 0.63.0",
+ "bytemuck",
  "cc",
 ]
 

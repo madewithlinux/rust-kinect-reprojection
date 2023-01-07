@@ -6,7 +6,7 @@ use bevy::{math::Affine3A, prelude::*};
 use image::{Rgb, RgbImage};
 use kinect1::{
     start_frame_thread, FrameMessageReceiver, Gray16Image, KinectFrameMessage, NuiDepthPixelToDepth,
-    NUI_IMAGE_DEPTH_NO_VALUE,
+    NUI_IMAGE_DEPTH_NO_VALUE, worker_v2::start_frame_thread2,
 };
 
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
@@ -165,7 +165,8 @@ pub fn try_load_baseline_frame(path: impl AsRef<std::path::Path>) -> Gray16Image
 }
 
 fn setup_kinect_receiver(world: &mut World) {
-    let receiver = start_frame_thread();
+    // let receiver = start_frame_thread();
+    let receiver = start_frame_thread2();
     world.insert_non_send_resource(KinectReceiver(receiver));
     world.spawn((
         Name::new("frame and buffer"),

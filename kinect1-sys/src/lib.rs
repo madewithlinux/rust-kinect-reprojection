@@ -2,10 +2,13 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
+use bytemuck::{AnyBitPattern, Zeroable};
+
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 pub fn NuiDepthPixelToDepth(packedPixel: u16) -> u16 {
     packedPixel >> NUI_IMAGE_PLAYER_INDEX_SHIFT
+    
 }
 
 pub fn NuiDepthPixelToPlayerIndex(packedPixel: u16) -> u16 {
@@ -56,6 +59,9 @@ impl Default for NUI_DEPTH_IMAGE_POINT {
         }
     }
 }
+
+unsafe impl Zeroable for NUI_DEPTH_IMAGE_PIXEL {}
+unsafe impl AnyBitPattern for NUI_DEPTH_IMAGE_PIXEL {}
 
 impl Default for NUI_DEPTH_IMAGE_PIXEL {
     fn default() -> Self {
