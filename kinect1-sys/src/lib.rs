@@ -8,7 +8,6 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 pub fn NuiDepthPixelToDepth(packedPixel: u16) -> u16 {
     packedPixel >> NUI_IMAGE_PLAYER_INDEX_SHIFT
-    
 }
 
 pub fn NuiDepthPixelToPlayerIndex(packedPixel: u16) -> u16 {
@@ -45,6 +44,15 @@ impl Default for NUI_LOCKED_RECT {
             Pitch: Default::default(),
             size: Default::default(),
             pBits: std::ptr::null_mut(),
+        }
+    }
+}
+
+impl Default for NUI_COLOR_IMAGE_POINT {
+    fn default() -> Self {
+        Self {
+            x: Default::default(),
+            y: Default::default(),
         }
     }
 }

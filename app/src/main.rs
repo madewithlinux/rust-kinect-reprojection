@@ -5,13 +5,13 @@ use minifb::{Key, Window, WindowOptions};
 const WIDTH: usize = 640;
 const HEIGHT: usize = 480;
 
-use kinect1::{get_sensor_count, start_frame_thread};
+use kinect1::{get_sensor_count, start_frame_thread, worker_v2::start_frame_thread2};
 
 fn main() -> Result<()> {
     println!("Hello, world!");
     dbg!(get_sensor_count().unwrap());
 
-    let receiver = start_frame_thread();
+    let receiver = start_frame_thread2();
 
     // let rgb_output_dir = PathBuf::from("data/rgb_frames/");
     // create_dir_all(&rgb_output_dir)?;

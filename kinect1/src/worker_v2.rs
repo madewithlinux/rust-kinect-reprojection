@@ -4,12 +4,12 @@ use bytemuck::cast_slice;
 use image::RgbImage;
 use kinect1_sys::{
     INuiCoordinateMapper, INuiFrameTexture, INuiSensor, NuiCreateSensorByIndex, NuiDepthPixelToDepth,
-    NuiDepthPixelToPlayerIndex, NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME,
-    NUI_IMAGE_PLAYER_INDEX_SHIFT, NUI_IMAGE_RESOLUTION, NUI_IMAGE_STREAM_FLAG_DISTINCT_OVERFLOW_DEPTH_VALUES,
-    NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA, NUI_INITIALIZE_FLAG_USES_COLOR,
-    NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX, NUI_INITIALIZE_FLAG_USES_SKELETON, NUI_LOCKED_RECT,
+    NuiDepthPixelToPlayerIndex, NUI_COLOR_IMAGE_POINT, NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME,
+    NUI_IMAGE_PLAYER_INDEX_SHIFT, NUI_IMAGE_RESOLUTION, NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA,
+    NUI_INITIALIZE_FLAG_USES_COLOR, NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX, NUI_INITIALIZE_FLAG_USES_SKELETON,
+    NUI_LOCKED_RECT,
 };
-use tracing::{info, warn};
+use tracing::info;
 use windows::Win32::{
     Foundation::WAIT_OBJECT_0,
     System::Threading::{WaitForMultipleObjects, WaitForSingleObject},
@@ -22,27 +22,28 @@ use crate::{
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FrameMappingType {
+pub enum FrameRegistrationType {
     #[default]
     None,
-    // TODO: name these in a better way that's less ambiguous which one is getting changed
-    ColorToDepth,
-    DepthToColor,
+    RemapDepth,
+    RemapColor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReceiverThreadArgs {
     pub sensor_index: i32,
+    /// NUI_IMAGE_RESOLUTION
     pub color_resolution: NUI_IMAGE_RESOLUTION,
     pub color_stream_flags: u32,
     pub color_buffered_frame_limit: u32,
 
+    /// NUI_IMAGE_RESOLUTION
     pub depth_resolution: NUI_IMAGE_RESOLUTION,
     pub depth_stream_flags: u32,
     pub depth_buffered_frame_limit: u32,
     pub use_extended_depth_range: bool,
 
-    pub mapping: FrameMappingType,
+    pub frame_registration: FrameRegistrationType,
 }
 
 impl ReceiverThreadArgs {
@@ -65,9 +66,10 @@ impl Default for ReceiverThreadArgs {
             depth_stream_flags: 0,
             depth_buffered_frame_limit: 2,
             use_extended_depth_range: true,
-            // TODO
-            // mapping: FrameMappingType::DepthToColor,
-            mapping: FrameMappingType::None,
+
+            // mapping: FrameMappingType::RemapColor,
+            frame_registration: FrameRegistrationType::RemapDepth,
+            // mapping: FrameMappingType::None,
         }
     }
 }
@@ -85,6 +87,7 @@ pub struct ReceiverThreadData {
     color_locked_rect: NUI_LOCKED_RECT,
     /// stored as BGRA8
     color_frame_data: Vec<u8>,
+    color_frame_points: Vec<NUI_COLOR_IMAGE_POINT>,
 
     depth_stream_handle: kinect1_sys::HANDLE,
     depth_next_frame_event: windows::Win32::Foundation::HANDLE,
@@ -92,7 +95,7 @@ pub struct ReceiverThreadData {
     depth_frame_info: ImageFrameInfo,
     depth_locked_rect: NUI_LOCKED_RECT,
     /// stored as u16 packed depth and player index
-    depth_frame_data: Vec<u16>,
+    // depth_frame_data: Vec<u16>,
     depth_frame_pixels: Vec<NUI_DEPTH_IMAGE_PIXEL>,
     depth_frame_points: Vec<NUI_DEPTH_IMAGE_POINT>,
 
@@ -101,7 +104,7 @@ pub struct ReceiverThreadData {
     // data to send
     have_rgba_data: bool,
     have_depth_data: bool,
-    processed_rgba: Vec<u8>,
+    processed_rgba: Vec<[u8; 4]>,
     processed_depth: Vec<u16>,
     processed_player_index: Vec<u8>,
 }
@@ -126,13 +129,14 @@ impl ReceiverThreadData {
             color_frame_info: Default::default(),
             color_locked_rect: Default::default(),
             color_frame_data: vec![Default::default(); color_width * color_height * 4],
+            color_frame_points: vec![Default::default(); color_width * color_height],
 
             depth_stream_handle: null_mut(),
             depth_next_frame_event: Default::default(),
             depth_frame: Default::default(),
             depth_frame_info: Default::default(),
             depth_locked_rect: Default::default(),
-            depth_frame_data: vec![Default::default(); depth_width * depth_height],
+            // depth_frame_data: vec![Default::default(); depth_width * depth_height],
             depth_frame_pixels: vec![Default::default(); depth_width * depth_height],
             depth_frame_points: vec![Default::default(); depth_width * depth_height],
 
@@ -224,18 +228,38 @@ impl ReceiverThreadData {
             &mut self.color_frame
         );
 
-        if self.args.mapping == FrameMappingType::DepthToColor {
-            // TODO
-            warn!("TODO: implement frame mapping")
+        if self.args.frame_registration == FrameRegistrationType::RemapColor && self.have_depth_data {
+            call_method!(
+                self.coordinate_mapper,
+                MapDepthFrameToColorFrame,
+                self.args.depth_resolution,
+                self.depth_frame_pixels.len() as u32,
+                self.depth_frame_pixels.as_mut_ptr(),
+                NUI_IMAGE_TYPE_COLOR,
+                self.args.color_resolution,
+                self.color_frame_points.len() as u32,
+                self.color_frame_points.as_mut_ptr()
+            );
+            let bgra_color_frame = cast_slice::<_, [u8; 4]>(&self.color_frame_data);
+            for (i, &point) in self.color_frame_points.iter().enumerate() {
+                let [b, g, r, _a] = if point.x > 0
+                    && point.y > 0
+                    && point.x < (self.color_frame_info.width as i32)
+                    && point.y < (self.color_frame_info.height as i32)
+                {
+                    let index = (point.y as usize) * self.color_frame_info.width + (point.x as usize);
+                    bgra_color_frame[index]
+                } else {
+                    [0, 0, 0, 255]
+                };
+                self.processed_rgba[i] = [r, g, b, 255];
+            }
+        } else {
+            for (i, &[b, g, r, _a]) in cast_slice::<_, [u8; 4]>(&self.color_frame_data).iter().enumerate() {
+                self.processed_rgba[i] = [r, g, b, 255];
+            }
         }
 
-        self.processed_rgba.clear();
-        for &[b, g, r, _a] in cast_slice::<_, [u8; 4]>(&self.color_frame_data) {
-            self.processed_rgba.push(r);
-            self.processed_rgba.push(g);
-            self.processed_rgba.push(b);
-            self.processed_rgba.push(255);
-        }
         self.have_rgba_data = true;
     }
 
@@ -272,15 +296,7 @@ impl ReceiverThreadData {
             self.depth_frame_info = ImageFrameInfo::from_image_frame(&self.depth_frame);
 
             call_method!(frame_texture, UnlockRect, 0);
-            self.processed_depth.clear();
-            self.processed_player_index.clear();
-            for &depth_pixel in self.depth_frame_pixels.iter() {
-                self.processed_depth.push(depth_pixel.depth);
-                self.processed_player_index.push(depth_pixel.playerIndex as u8);
-            }
-            self.have_depth_data = true;
         } else {
-            // TODO: make sure this works
             call_method!(
                 self.depth_frame.pFrameTexture,
                 LockRect,
@@ -293,19 +309,13 @@ impl ReceiverThreadData {
                 std::slice::from_raw_parts(self.depth_locked_rect.pBits, self.depth_locked_rect.size as usize)
             };
             let input_slice: &[u16] = cast_slice(input_slice_u8);
-            self.depth_frame_data.copy_from_slice(input_slice);
+            for (i, &packed_depth) in input_slice.iter().enumerate() {
+                self.depth_frame_pixels[i].depth = NuiDepthPixelToDepth(packed_depth);
+                self.depth_frame_pixels[i].playerIndex = NuiDepthPixelToPlayerIndex(packed_depth);
+            }
             self.depth_frame_info = ImageFrameInfo::from_image_frame(&self.depth_frame);
 
             call_method!(self.depth_frame.pFrameTexture, UnlockRect, 0);
-
-            self.processed_depth.clear();
-            self.processed_player_index.clear();
-            for &packed_depth in self.depth_frame_data.iter() {
-                self.processed_depth.push(NuiDepthPixelToDepth(packed_depth));
-                self.processed_player_index
-                    .push(NuiDepthPixelToPlayerIndex(packed_depth) as u8);
-            }
-            self.have_depth_data = true;
         }
 
         call_method!(
@@ -315,10 +325,40 @@ impl ReceiverThreadData {
             &mut self.depth_frame
         );
 
-        if self.args.mapping == FrameMappingType::ColorToDepth {
-            // TODO
-            warn!("TODO: implement frame mapping")
+        if self.args.frame_registration == FrameRegistrationType::RemapDepth {
+            call_method!(
+                self.coordinate_mapper,
+                MapColorFrameToDepthFrame,
+                NUI_IMAGE_TYPE_COLOR,
+                self.args.color_resolution,
+                self.args.depth_resolution,
+                self.depth_frame_pixels.len() as u32,
+                self.depth_frame_pixels.as_mut_ptr(),
+                self.depth_frame_points.len() as u32,
+                self.depth_frame_points.as_mut_ptr()
+            );
+            for (i, &point) in self.depth_frame_points.iter().enumerate() {
+                // find the original depth pixel because the depth point doesn't have the player index
+                let pixel = if point.x > 0
+                    && point.y > 0
+                    && point.x < (self.depth_frame_info.width as i32)
+                    && point.y < (self.depth_frame_info.height as i32)
+                {
+                    let index = (point.y as usize) * self.depth_frame_info.width + (point.x as usize);
+                    self.depth_frame_pixels[index]
+                } else {
+                    NUI_DEPTH_IMAGE_PIXEL::default()
+                };
+                self.processed_depth[i] = pixel.depth;
+                self.processed_player_index[i] = pixel.playerIndex as u8;
+            }
+        } else {
+            for (i, &depth_pixel) in self.depth_frame_pixels.iter().enumerate() {
+                self.processed_depth[i] = depth_pixel.depth;
+                self.processed_player_index[i] = depth_pixel.playerIndex as u8;
+            }
         }
+        self.have_depth_data = true;
     }
 
     pub fn wait_and_receive_next_frame(&mut self) -> KinectFrameMessage {
@@ -337,7 +377,7 @@ impl ReceiverThreadData {
             if unsafe { WaitForSingleObject(self.color_next_frame_event, 0) } == WAIT_OBJECT_0 {
                 self.receive_color_frame();
                 processed_rgb.clear();
-                for &[r, g, b, _a] in cast_slice::<_, [u8; 4]>(&self.processed_rgba) {
+                for &[r, g, b, _a] in self.processed_rgba.iter() {
                     processed_rgb.push(r);
                     processed_rgb.push(g);
                     processed_rgb.push(b);
