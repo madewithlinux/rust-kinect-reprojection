@@ -1,13 +1,13 @@
 use std::f32::consts::PI;
 
 use bevy::{math::Affine3A, prelude::*};
-use bevy_aabb_instancing::{
-    ColorOptions, ColorOptionsId, ColorOptionsMap, Cuboid, Cuboids, ScalarHueColorOptions, VertexPullingRenderPlugin,
-    COLOR_MODE_RGB, COLOR_MODE_SCALAR_HUE,
-};
+use bevy_aabb_instancing::{ColorOptions, ColorOptionsMap, Cuboid, Cuboids, VertexPullingRenderPlugin, COLOR_MODE_RGB};
 use bevy_render::primitives::Aabb;
 use image::{Luma, Rgb};
+use itertools::{iproduct, Itertools};
+use kinect1::Gray16Image;
 use kinect1::NuiDepthPixelToDepth;
+use kinect1::NUI_DEPTH_DEPTH_UNKNOWN_VALUE;
 use smooth_bevy_cameras::{
     controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin},
     LookTransformPlugin,
@@ -56,7 +56,6 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
         scalar_hue: Default::default(),
     });
 
-    const PATCHES_PER_DIM: usize = 20;
     const PATCH_SIZE: usize = 150;
     const SCENE_RADIUS: f32 = 1500.0;
 
@@ -141,31 +140,63 @@ fn update_cuboid_position_color(
             // set position
             // let pixel_pos = *buffers.point_cloud.get_row_major(flat_index).unwrap();
             // let pixel_pos = *buffers.point_cloud.get(y as usize, x as usize).unwrap();
-            let &Luma([depth]) = buffers.derived_frame.depth_frame.get_pixel(x, y);
-            let pixel_pos = convert_depth_to_xyz(
-                DEPTH_WIDTH as f32,
-                DEPTH_HEIGHT as f32,
-                x as f32,
-                y as f32,
-                NuiDepthPixelToDepth(depth) as f32,
-            );
-            let neighbor_pos = convert_depth_to_xyz(
-                DEPTH_WIDTH as f32,
-                DEPTH_HEIGHT as f32,
-                (x + 1) as f32,
-                (y + 1) as f32,
-                NuiDepthPixelToDepth(depth) as f32,
-            );
-            let pixel_pos = point_transform.transform_vector3(pixel_pos);
-            let neighbor_pos = point_transform.transform_vector3(neighbor_pos);
-            // const POINT_WIDTH: f32 = 1.0;
-            let point_width = pixel_pos.distance(neighbor_pos) / 2.0;
-            const POINT_DEPTH: f32 = 50.0;
-            let min = pixel_pos - Vec3::new(point_width, point_width, POINT_DEPTH);
-            let max = pixel_pos + Vec3::new(point_width, point_width, 0.0);
-            cuboids.instances[i].minimum = min;
-            cuboids.instances[i].maximum = max;
+            let &Luma([packed_depth]) = buffers.derived_frame.depth_frame.get_pixel(x, y);
+            if packed_depth == NUI_DEPTH_DEPTH_UNKNOWN_VALUE {
+                cuboids.instances[i].minimum = Vec3::ZERO;
+                cuboids.instances[i].maximum = Vec3::splat(1.0);
+            } else {
+                let pixel_pos = convert_depth_to_xyz(
+                    DEPTH_WIDTH as f32,
+                    DEPTH_HEIGHT as f32,
+                    x as f32,
+                    (DEPTH_HEIGHT as u32 - y) as f32,
+                    NuiDepthPixelToDepth(packed_depth) as f32,
+                );
+                let neighbor_pos = convert_depth_to_xyz(
+                    DEPTH_WIDTH as f32,
+                    DEPTH_HEIGHT as f32,
+                    (x + 1) as f32,
+                    (DEPTH_HEIGHT as u32 - y + 1) as f32,
+                    NuiDepthPixelToDepth(packed_depth) as f32,
+                );
+                let pixel_pos = point_transform.transform_vector3(pixel_pos);
+                let neighbor_pos = point_transform.transform_vector3(neighbor_pos);
+                // const POINT_WIDTH: f32 = 1.0;
+                let point_width = pixel_pos.distance(neighbor_pos) / 2.0;
+                // let point_cuboid_depth: f32 = 50.0;
+                let point_cuboid_depth: f32 = adjacent_depth_difference(&buffers.derived_frame.depth_frame, x, y);
+                let min = pixel_pos - Vec3::new(point_width, point_width, point_cuboid_depth);
+                let max = pixel_pos + Vec3::new(point_width, point_width, 0.0);
+                cuboids.instances[i].minimum = min;
+                cuboids.instances[i].maximum = max;
+            }
         }
         *aabb = cuboids.aabb();
+    }
+}
+
+fn adjacent_depth_difference(depth_frame: &Gray16Image, x: u32, y: u32) -> f32 {
+    let &Luma([packed_depth]) = depth_frame.get_pixel(x, y);
+    let depth = NuiDepthPixelToDepth(packed_depth) as f32;
+    let (min_depth, _max_depth) = {
+        let x = x as i32;
+        let y = y as i32;
+        iproduct!((x - 1)..=(x + 1), (y - 1)..=(y + 1))
+            .filter(|&(i, j)| i >= 0 && i < (DEPTH_WIDTH as i32) && j >= 0 && j < (DEPTH_HEIGHT as i32))
+            .map(|(i, j)| depth_frame.get_pixel(i as u32, j as u32).0[0])
+            .filter(|&pd| pd > 0)
+            .filter(|&pd| pd != NUI_DEPTH_DEPTH_UNKNOWN_VALUE)
+            .map(|pd| NuiDepthPixelToDepth(pd) as f32)
+            .minmax()
+            .into_option()
+            .unwrap_or((depth, depth))
+    };
+    let adj_depth = depth - min_depth;
+    if adj_depth < 5.0 {
+        5.0
+    } else if adj_depth > 100.0 {
+        100.0
+    } else {
+        adj_depth
     }
 }
