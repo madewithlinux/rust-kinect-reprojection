@@ -3,8 +3,9 @@ use dock_ui::MainCamera;
 
 pub mod dock_ui;
 pub mod frame_display;
-pub mod receiver;
 pub mod frame_visualization_util;
+pub mod point_cloud;
+pub mod receiver;
 
 pub const COLOR_WIDTH: usize = 640;
 pub const COLOR_HEIGHT: usize = 480;
@@ -25,6 +26,7 @@ pub fn app_main() {
         }))
         .add_plugin(receiver::KinectReceiverPlugin)
         // .add_plugin(frame_display::FrameDisplayPlugin)
+        .add_plugin(point_cloud::PointCloudPlugin)
         .add_plugin(dock_ui::AppUiDockPlugin)
         .register_type::<MainCamera>()
         .run();

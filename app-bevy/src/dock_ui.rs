@@ -24,9 +24,7 @@ impl Plugin for AppUiDockPlugin {
             .add_plugin(bevy_egui::EguiPlugin)
             .insert_resource(UiState::new())
             .add_system_to_stage(CoreStage::PreUpdate, show_ui_system.at_end())
-            // .add_startup_system(setup)
-            // .add_startup_system(spawn_camera)
-            .add_startup_system(spawn_2d_camera)
+            // .add_startup_system(spawn_2d_camera)
             .add_system(set_camera_viewport)
             .add_system(set_gizmo_mode)
             .add_system(update_framebuffer_images)
@@ -102,6 +100,7 @@ struct UiState {
 impl UiState {
     pub fn new() -> Self {
         let mut tree = Tree::new(vec![
+            Window::GameView,
             Window::FrameBuffer(FrameBufferDescriptor::CurrentColor),
             Window::FrameBuffer(FrameBufferDescriptor::PointCloud),
             // Window::FrameBuffer(FrameBufferDescriptor::ActiveColor),
@@ -110,9 +109,9 @@ impl UiState {
             // Window::FrameBuffer(FrameBufferDescriptor::CurrentPlayerIndex),
             Window::FrameBuffer(FrameBufferDescriptor::DerivedDepth),
             Window::FrameBuffer(FrameBufferDescriptor::DerivedPlayerIndex),
-            Window::GameView,
         ]);
-        let [game, _inspector] = tree.split_right(NodeIndex::root(), 0.75, vec![Window::Inspector]);
+        // let [game, _inspector] = tree.split_right(NodeIndex::root(), 0.75, vec![Window::Inspector]);
+        let game = NodeIndex::root();
         let [_game, hierarchy] = tree.split_left(
             game,
             0.2,
@@ -122,6 +121,7 @@ impl UiState {
                 Window::WorldEntities,
                 Window::Resources,
                 Window::Assets,
+                Window::Inspector,
             ],
         );
         let [_bottom, _controls] = tree.split_below(hierarchy, 0.8, vec![Window::Controls]);

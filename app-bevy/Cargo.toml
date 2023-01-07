@@ -26,3 +26,8 @@ egui_dock = "0.3"
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo", rev = "516dc8453bb6423d8cf050af172e854611a8a1d9" }
 rfd = "0.10.0"
 bytemuck = "1.12.3"
+
+# bevy-aabb-instancing = "0.7.0"
+# smooth-bevy-cameras = "0.6.0"
+bevy-aabb-instancing = { git = "https://github.com/foresightminingsoftwarecorporation/bevy-aabb-instancing" }
+smooth-bevy-cameras = { git = "https://github.com/olegomon/smooth-bevy-cameras" }
