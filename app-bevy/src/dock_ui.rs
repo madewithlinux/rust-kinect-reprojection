@@ -11,7 +11,7 @@ use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
 
-use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferImageHandle, FrameBufferDescriptor};
+use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
 use crate::receiver::{load_baseline_frame, KinectFrameBuffers};
 use crate::{COLOR_HEIGHT, COLOR_WIDTH};
 
@@ -104,9 +104,11 @@ impl UiState {
         let mut tree = Tree::new(vec![
             Window::FrameBuffer(FrameBufferDescriptor::CurrentColor),
             Window::FrameBuffer(FrameBufferDescriptor::PointCloud),
-            Window::FrameBuffer(FrameBufferDescriptor::CurrentDepth),
+            // Window::FrameBuffer(FrameBufferDescriptor::ActiveColor),
+            // Window::FrameBuffer(FrameBufferDescriptor::ActiveDepth),
+            // Window::FrameBuffer(FrameBufferDescriptor::CurrentDepth),
+            // Window::FrameBuffer(FrameBufferDescriptor::CurrentPlayerIndex),
             Window::FrameBuffer(FrameBufferDescriptor::DerivedDepth),
-            Window::FrameBuffer(FrameBufferDescriptor::CurrentPlayerIndex),
             Window::FrameBuffer(FrameBufferDescriptor::DerivedPlayerIndex),
             Window::GameView,
         ]);

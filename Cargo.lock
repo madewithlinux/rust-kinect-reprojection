@@ -2448,6 +2448,7 @@ name = "kinect1"
 version = "0.1.0"
 dependencies = [
  "array2d",
+ "bytemuck",
  "crossbeam",
  "image 0.24.5",
  "itertools",
@@ -3477,6 +3478,7 @@ dependencies = [
  "bevy_framepace",
  "bevy_reflect",
  "bevy_render",
+ "bytemuck",
  "egui",
  "egui-gizmo",
  "egui_dock",
