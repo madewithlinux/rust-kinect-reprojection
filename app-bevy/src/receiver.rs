@@ -14,7 +14,8 @@ use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
 #[derive(Debug)]
 pub struct KinectReceiver(pub FrameMessageReceiver);
 
-#[derive(Component, Debug, Reflect)]
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Debug)]
 pub struct KinectPostProcessorConfig {
     pub history_buffer_size: usize,
     pub depth_threshold: f32,
@@ -26,7 +27,9 @@ impl Default for KinectPostProcessorConfig {
         Self {
             history_buffer_size: 2,
             depth_threshold: 100.0,
-            sensor_tilt_angle_deg: -33.0,
+            // sensor_tilt_angle_deg: -33.0,
+            // sensor_tilt_angle_deg: 90.0,
+            sensor_tilt_angle_deg: 0.0,
             baseline_threshold_background_removal_enabled: false,
         }
     }
@@ -102,6 +105,8 @@ fn process_received_frame(
         baseline_threshold_background_removal(config, buffers);
     }
 
+    // TODO: use a real correction factor instead of this
+    let point_transform = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0);
     for (i, j, depth_luma) in buffers.derived_frame.depth_frame.enumerate_pixels() {
         let xyz = convert_depth_to_xyz(
             DEPTH_WIDTH as f32,
@@ -110,8 +115,7 @@ fn process_received_frame(
             j as f32,
             NuiDepthPixelToDepth(depth_luma.0[0]) as f32,
         );
-        // TODO: use a real correction factor instead of this
-        let xyz = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0).transform_vector3(xyz);
+        let xyz = point_transform.transform_vector3(xyz);
         buffers.point_cloud[(j as usize, i as usize)] = xyz;
     }
 }

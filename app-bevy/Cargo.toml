@@ -11,6 +11,7 @@ anyhow = "1.0.66"
 thiserror = "1.0"
 image = "0.24.5"
 array2d = "0.3"
+itertools = "0.10.5"
 
 # bevy = "0.9"
 bevy = { version = "0.9", features = ["dynamic"] }
@@ -19,7 +20,7 @@ bevy_asset = { version = "0.9" }
 bevy_render = { version = "0.9" }
 bevy_framepace = "0.9"
 
-bevy-inspector-egui = "0.16.0-pre.2"
+bevy-inspector-egui = { version = "0.16.0-pre.2", default-features = false, features=["bevy_pbr"] }
 egui = "0.20.0"
 bevy_egui = "0.18"
 egui_dock = "0.3"

@@ -3,7 +3,9 @@ use std::any::TypeId;
 use bevy::prelude::*;
 use bevy_asset::{HandleId, ReflectAsset};
 use bevy_inspector_egui::bevy_inspector::hierarchy::{hierarchy_ui, SelectedEntities};
-use bevy_inspector_egui::bevy_inspector::{self, ui_for_entities_shared_components, ui_for_entity};
+use bevy_inspector_egui::bevy_inspector::{
+    self, ui_for_entities_shared_components, ui_for_entity, ui_for_entity_with_children,
+};
 use bevy_inspector_egui::DefaultInspectorConfigPlugin;
 use bevy_reflect::TypeRegistry;
 use bevy_render::camera::{CameraProjection, Viewport};
@@ -116,15 +118,15 @@ impl UiState {
             game,
             0.2,
             vec![
-                Window::World,
                 Window::Hierarchy,
-                Window::WorldEntities,
+                Window::World,
+                // Window::WorldEntities,
                 Window::Resources,
                 Window::Assets,
-                Window::Inspector,
+                // Window::Inspector,
             ],
         );
-        let [_bottom, _controls] = tree.split_below(hierarchy, 0.8, vec![Window::Controls]);
+        let [_bottom, _controls] = tree.split_below(hierarchy, 0.5, vec![Window::Inspector, Window::Controls]);
 
         Self {
             tree,
@@ -188,7 +190,8 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Window::Assets => select_asset(ui, &type_registry, self.world, self.selection),
             Window::Inspector => match *self.selection {
                 InspectorSelection::Entities => match self.selected_entities.as_slice() {
-                    &[entity] => ui_for_entity(self.world, entity, ui, false),
+                    // TODO: I don't know why ui_for_entity_with_children doesn't work anymore
+                    // &[entity] => ui_for_entity_with_children(self.world, entity, ui),
                     entities => ui_for_entities_shared_components(self.world, entities, ui),
                 },
                 InspectorSelection::Resource(type_id, ref name) => {
