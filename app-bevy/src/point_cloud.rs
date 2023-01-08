@@ -6,7 +6,7 @@ use bevy_prototype_debug_lines::*;
 use bevy_render::primitives::Aabb;
 
 use itertools::{iproduct, Itertools};
-use kinect1::skeleton::SkeletonTrackingState;
+use kinect1::skeleton::{SkeletonPositionTrackingState, SkeletonTrackingState};
 use smooth_bevy_cameras::{
     controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin},
     LookTransformPlugin,
@@ -105,8 +105,8 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
                 mouse_translate_sensitivity: Vec2::splat(100.0),
                 ..Default::default()
             },
-            Vec3::new(0.0, 100.0, 0.0),
-            Vec3::new(100.0, 0.0, 100.0),
+            Vec3::new(-1.0, 1.0, -1.0) * 3_000.0,
+            Vec3::new(1.0, 0.0, 1.0) * 1_000.0,
         ))
         .insert(MainCamera);
 }
@@ -190,14 +190,42 @@ fn skeleton_lines(
             let Some((start_xyz, end_xyz)) = depth_transformer.skeleton_bone_to_xyz(&bone, &buffers.derived_frame.depth) else {
                 continue;
             };
-            lines.line(start_xyz, end_xyz, 0.0);
+            let [start_color, end_color] = bone.map(|p| match p.tracking_state {
+                SkeletonPositionTrackingState::NotTracked => Color::RED,
+                SkeletonPositionTrackingState::Inferred => Color::YELLOW,
+                SkeletonPositionTrackingState::Tracked => Color::WHITE,
+            });
+            lines.line_gradient(start_xyz, end_xyz, 0.0, start_color, end_color);
         }
     }
 }
 
-fn axis_references(mut lines: ResMut<DebugLines>) {
-    let scale = 1000.0;
+fn axis_references(mut lines: ResMut<DebugLines>, dt: Res<KinectDepthTransformer>) {
+    let scale = 1_000.0;
     lines.line_colored(Vec3::ZERO, Vec3::X * scale, 0.0, Color::RED);
     lines.line_colored(Vec3::ZERO, Vec3::Y * scale, 0.0, Color::GREEN);
     lines.line_colored(Vec3::ZERO, Vec3::Z * scale, 0.0, Color::BLUE);
+
+    // references for the kinect itself
+    lines.line_colored(
+        dt.point_transform_matrix_inverse.transform_point3(Vec3::ZERO),
+        dt.point_transform_matrix_inverse
+            .transform_point3(Vec3::X * scale / 2.0),
+        0.0,
+        Color::RED,
+    );
+    lines.line_colored(
+        dt.point_transform_matrix_inverse.transform_point3(Vec3::ZERO),
+        dt.point_transform_matrix_inverse
+            .transform_point3(Vec3::Y * scale / 2.0),
+        0.0,
+        Color::GREEN,
+    );
+    lines.line_colored(
+        dt.point_transform_matrix_inverse.transform_point3(Vec3::ZERO),
+        dt.point_transform_matrix_inverse
+            .transform_point3(Vec3::Z * scale / 2.0),
+        0.0,
+        Color::BLUE,
+    );
 }

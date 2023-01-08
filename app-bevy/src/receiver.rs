@@ -22,7 +22,20 @@ pub struct KinectDepthTransformer {
     pub height: f32,
     // TODO: add coordinate offset as well
     pub sensor_tilt_angle_deg: f32,
+    pub kinect_position: Vec3,
+    pub kinect_rot_deg: Vec3,
+    pub kinect_scale: Vec3,
     pub point_transform_matrix: Affine3A,
+    pub point_transform_matrix_inverse: Affine3A,
+}
+fn update_depth_transformer(mut kdt: ResMut<KinectDepthTransformer>) {
+    kdt.point_transform_matrix = Affine3A::IDENTITY
+        * Affine3A::from_rotation_x(kdt.kinect_rot_deg.x * PI / 180.0)
+        * Affine3A::from_rotation_y(kdt.kinect_rot_deg.y * PI / 180.0)
+        * Affine3A::from_rotation_z(kdt.kinect_rot_deg.z * PI / 180.0)
+        * Affine3A::from_translation(kdt.kinect_position)
+        * Affine3A::from_scale(kdt.kinect_scale);
+    kdt.point_transform_matrix_inverse = kdt.point_transform_matrix.inverse();
 }
 impl KinectDepthTransformer {
     pub fn new() -> Self {
@@ -33,7 +46,11 @@ impl KinectDepthTransformer {
             width: DEPTH_WIDTH as f32,
             height: DEPTH_HEIGHT as f32,
             sensor_tilt_angle_deg,
+            kinect_position: Vec3::new(-0.077, 2.4273, 1.9451) * 1_000.0,
+            kinect_rot_deg: Vec3::new(33.0, 0.0, 0.0),
+            kinect_scale: Vec3::new(1.0, -1.0, 1.0),
             point_transform_matrix,
+            point_transform_matrix_inverse: Affine3A::IDENTITY,
         }
     }
     pub fn skeleton_bone_to_xyz(&self, bone: &[SkeletonPositionData; 2], depth_frame: &[u16]) -> Option<(Vec3, Vec3)> {
@@ -72,7 +89,7 @@ impl KinectDepthTransformer {
         let scale_factor = 0.0021;
         let x = (i - self.width / 2.0) * (z + min_distance) * scale_factor;
         let y = (j - self.height / 2.0) * (z + min_distance) * scale_factor;
-        self.point_transform_matrix.transform_point3(Vec3::new(x, y, z))
+        self.point_transform_matrix_inverse.transform_point3(Vec3::new(x, y, z))
     }
 }
 
@@ -240,6 +257,7 @@ impl Plugin for KinectReceiverPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_kinect_receiver)
             .add_system(receive_kinect_current_frame)
+            .add_system(update_depth_transformer)
             .register_type::<KinectPostProcessorConfig>()
             .register_type::<KinectDepthTransformer>();
     }

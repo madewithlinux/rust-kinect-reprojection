@@ -418,7 +418,11 @@ impl ReceiverThreadData {
                         self.args.color_resolution,
                         &mut color_point
                     );
-                    (color_point.x as usize) + (color_point.y as usize) * self.color_width
+                    if color_point.x < 0 || color_point.y < 0 {
+                        0
+                    } else {
+                        (color_point.x as usize) + (color_point.y as usize) * self.color_width
+                    }
                 } else {
                     0
                 }
