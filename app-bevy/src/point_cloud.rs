@@ -6,6 +6,7 @@ use bevy_prototype_debug_lines::*;
 use bevy_render::primitives::Aabb;
 
 use itertools::{iproduct, Itertools};
+use kinect1::skeleton::SkeletonTrackingState;
 use smooth_bevy_cameras::{
     controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin},
     LookTransformPlugin,
@@ -197,13 +198,12 @@ fn skeleton_lines(
     // TODO: use a real correction factor instead of this
     let point_transform = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0);
 
-    for &skeleton in buffers.current_frame.skeleton_points.iter() {
-        if skeleton == <[usize; 20]>::default() {
+    for &skeleton in buffers.current_frame.skeleton_frame.skeleton_data.iter() {
+        if skeleton.tracking_state == SkeletonTrackingState::NotTracked {
             continue;
         }
-        let skeleton_points = skeleton
+        let skeleton_points = skeleton.skeleton_pixel_indexes
             .iter()
-            // .map(|&idx| point_transform.transform_vector3(*buffers.point_cloud.get_row_major(idx).unwrap()))
             .flat_map(|&idx| buffers.point_cloud.get_row_major(idx))
             .map(|&pos| point_transform.transform_vector3(pos))
             .collect_vec();

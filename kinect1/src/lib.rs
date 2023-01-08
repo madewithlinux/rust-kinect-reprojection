@@ -66,6 +66,7 @@ use winresult::{HResult, HResultError};
 
 mod hresult_helper;
 pub mod worker_v2;
+pub mod skeleton;
 
 #[derive(Error, Debug)]
 pub enum KinectError {

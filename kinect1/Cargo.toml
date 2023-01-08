@@ -16,6 +16,11 @@ itertools = "0.10.5"
 crossbeam = "0.8.2"
 bytemuck = "1.12.3"
 tracing = "0.1.37"
+num = "0.4"
+num-derive = "0.3"
+num-traits = "0.2"
+enumset = "1.0.12"
+ordered-float = "3.4.0"
 
 [dependencies.windows]
 version = "0.43.0"

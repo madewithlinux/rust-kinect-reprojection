@@ -19,9 +19,12 @@ use windows::Win32::{
 };
 
 use crate::{
-    call_method, check_fail, convert_resolution_to_size, try_call_method, vtable_method, ImageFrameInfo,
-    MAX_ALLOWED_ELAPSED_TIME, NUI_IMAGE_RESOLUTION_640X480, NUI_IMAGE_TYPE_COLOR,
-    NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX,
+    call_method, check_fail, convert_resolution_to_size,
+    skeleton::{
+        sk_vector4_to_vector4, SkVector4, SkeletonFrame, SkeletonPositionTrackingState, SKELETON_POSITION_COUNT,
+    },
+    try_call_method, vtable_method, ImageFrameInfo, MAX_ALLOWED_ELAPSED_TIME, NUI_IMAGE_RESOLUTION_640X480,
+    NUI_IMAGE_TYPE_COLOR, NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,8 +124,7 @@ pub struct ReceiverThreadData {
     processed_rgba: Vec<[u8; 4]>,
     processed_depth: Vec<u16>,
     processed_player_index: Vec<u8>,
-    /// indexes into depth data
-    processed_skeleton_points: [[usize; 20]; 6],
+    processed_skeleton_frame: SkeletonFrame,
 }
 
 const FRAME_MS_TO_WAIT: u32 = 0;
@@ -172,7 +174,7 @@ impl ReceiverThreadData {
             processed_rgba: vec![Default::default(); color_width * color_height],
             processed_depth: vec![Default::default(); depth_width * depth_height],
             processed_player_index: vec![Default::default(); depth_width * depth_height],
-            processed_skeleton_points: Default::default(),
+            processed_skeleton_frame: Default::default(),
         };
         out.init();
         out
@@ -403,15 +405,11 @@ impl ReceiverThreadData {
             &mut self.skeleton_frame
         );
 
-        for (i, skeleton) in self.skeleton_frame.SkeletonData.iter().enumerate() {
-            for (j, skeleton_point) in skeleton.SkeletonPositions.iter().enumerate() {
-                let mut skeleton_point = skeleton_point.clone();
+        let transform_skeleton_point_to_color_index =
+            |skeleton_point: &SkVector4, point_tracking_state: SkeletonPositionTrackingState| {
+                let mut skeleton_point = sk_vector4_to_vector4(skeleton_point);
                 let mut color_point: NUI_COLOR_IMAGE_POINT = Default::default();
-                if skeleton_point.w != 0.0
-                    || skeleton_point.x != 0.0
-                    || skeleton_point.y != 0.0
-                    || skeleton_point.z != 0.0
-                {
+                if point_tracking_state != SkeletonPositionTrackingState::NotTracked {
                     call_method!(
                         self.coordinate_mapper,
                         MapSkeletonPointToColorPoint,
@@ -420,9 +418,19 @@ impl ReceiverThreadData {
                         self.args.color_resolution,
                         &mut color_point
                     );
+                    (color_point.x as usize) + (color_point.y as usize) * self.color_width
+                } else {
+                    0
                 }
-                let color_index = (color_point.x as usize) + (color_point.y as usize) * self.color_width;
-                self.processed_skeleton_points[i][j] = color_index;
+            };
+
+        self.processed_skeleton_frame = SkeletonFrame::from(&self.skeleton_frame);
+        for skeleton in self.processed_skeleton_frame.skeleton_data.iter_mut() {
+            for i in 0..SKELETON_POSITION_COUNT {
+                skeleton.skeleton_pixel_indexes[i] = transform_skeleton_point_to_color_index(
+                    &skeleton.skeleton_positions[i],
+                    skeleton.skeleton_position_tracking_state[i],
+                );
             }
         }
 
@@ -482,16 +490,6 @@ impl ReceiverThreadData {
             }
         }
 
-        // if self
-        //     .skeleton_frame
-        //     .SkeletonData
-        //     .iter()
-        //     .any(|&sk| format!("{:?}", sk) != format!("{:?}", NUI_SKELETON_DATA::default()))
-        // {
-        //     info!("skeleton_frame: {:?}", self.skeleton_frame);
-        //     info!("self.processed_skeleton_points: {:?}", self.processed_skeleton_points);
-        // }
-
         FrameMessage {
             width,
             height,
@@ -499,8 +497,7 @@ impl ReceiverThreadData {
             rgba: std::mem::take(&mut self.processed_rgba),
             depth: std::mem::take(&mut self.processed_depth),
             player_index: std::mem::take(&mut self.processed_player_index),
-            skeleton_frame: self.skeleton_frame,
-            skeleton_points: self.processed_skeleton_points,
+            skeleton_frame: std::mem::take(&mut self.processed_skeleton_frame),
             color_frame_info: self.color_frame_info,
             depth_frame_info: self.depth_frame_info,
         }
@@ -514,8 +511,8 @@ pub struct FrameMessage {
     pub rgba: Vec<[u8; 4]>,
     pub depth: Vec<u16>,
     pub player_index: Vec<u8>,
-    pub skeleton_frame: NUI_SKELETON_FRAME,
-    pub skeleton_points: [[usize; 20]; 6],
+    pub skeleton_frame: SkeletonFrame,
+
     // raw fields from the kinect itself
     pub color_frame_info: ImageFrameInfo,
     pub depth_frame_info: ImageFrameInfo,
