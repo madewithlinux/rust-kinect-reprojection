@@ -2,6 +2,7 @@ use std::f32::consts::PI;
 
 use bevy::{math::Affine3A, prelude::*};
 use bevy_aabb_instancing::{ColorOptions, ColorOptionsMap, Cuboid, Cuboids, VertexPullingRenderPlugin, COLOR_MODE_RGB};
+use bevy_prototype_debug_lines::*;
 use bevy_render::primitives::Aabb;
 
 use itertools::{iproduct, Itertools};
@@ -22,6 +23,7 @@ impl Plugin for PointCloudPlugin {
         app //
             // .add_plugins(DefaultPlugins)
             .insert_resource(Msaa { samples: 1 })
+            .add_plugin(DebugLinesPlugin::default())
             .add_plugin(VertexPullingRenderPlugin { outlines: false })
             .add_plugin(LookTransformPlugin)
             // .add_plugin(FpsCameraPlugin::default())
@@ -29,6 +31,7 @@ impl Plugin for PointCloudPlugin {
             .add_startup_system(setup)
             // .add_system(update_scalar_hue_options)
             .add_system(update_cuboid_position_color)
+            .add_system(skeleton_lines)
             // .register_type::<BufferIndexes>()
             ;
     }
@@ -134,14 +137,16 @@ fn update_cuboid_position_color(
                     DEPTH_WIDTH as f32,
                     DEPTH_HEIGHT as f32,
                     x as f32,
-                    (DEPTH_HEIGHT as u32 - y) as f32,
+                    // (DEPTH_HEIGHT as u32 - y) as f32,
+                    y as f32,
                     depth as f32,
                 );
                 let neighbor_pos = convert_depth_to_xyz(
                     DEPTH_WIDTH as f32,
                     DEPTH_HEIGHT as f32,
                     (x + 1) as f32,
-                    (DEPTH_HEIGHT as u32 - y + 1) as f32,
+                    // (DEPTH_HEIGHT as u32 - y + 1) as f32,
+                    (y + 1) as f32,
                     depth as f32,
                 );
                 let pixel_pos = point_transform.transform_vector3(pixel_pos);
@@ -181,5 +186,31 @@ fn adjacent_depth_difference(depth_frame: &Vec<u16>, x: usize, y: usize, min: f3
         max
     } else {
         adj_depth
+    }
+}
+
+fn skeleton_lines(
+    data_source_query: Query<(&KinectPostProcessorConfig, &KinectFrameBuffers)>,
+    mut lines: ResMut<DebugLines>,
+) {
+    let (config, buffers) = data_source_query.single();
+    // TODO: use a real correction factor instead of this
+    let point_transform = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0);
+
+    for &skeleton in buffers.current_frame.skeleton_points.iter() {
+        if skeleton == <[usize; 20]>::default() {
+            continue;
+        }
+        let skeleton_points = skeleton
+            .iter()
+            // .map(|&idx| point_transform.transform_vector3(*buffers.point_cloud.get_row_major(idx).unwrap()))
+            .flat_map(|&idx| buffers.point_cloud.get_row_major(idx))
+            .map(|&pos| point_transform.transform_vector3(pos))
+            .collect_vec();
+        let start = skeleton_points[0];
+        for &end in skeleton_points.iter() {
+            let duration = 0.0; // Duration of 0 will show the line for 1 frame.
+            lines.line(start, end, duration);
+        }
     }
 }

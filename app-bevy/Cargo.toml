@@ -19,6 +19,7 @@ bevy_reflect = { version = "0.9" }
 bevy_asset = { version = "0.9" }
 bevy_render = { version = "0.9" }
 bevy_framepace = "0.9"
+bevy_prototype_debug_lines = { version = "0.9", features = ["3d"] }
 
 bevy-inspector-egui = { version = "0.16.0-pre.2", default-features = false, features=["bevy_pbr"] }
 egui = "0.20.0"

@@ -80,6 +80,46 @@ impl Default for NUI_DEPTH_IMAGE_PIXEL {
     }
 }
 
+
+impl Default for Vector4 {
+    fn default() -> Self {
+        Self {
+            x: Default::default(),
+            y: Default::default(),
+            z: Default::default(),
+            w: Default::default(),
+        }
+    }
+}
+
+impl Default for NUI_SKELETON_DATA {
+    fn default() -> Self {
+        Self {
+            eTrackingState: Default::default(),
+            dwTrackingID: Default::default(),
+            dwEnrollmentIndex: Default::default(),
+            dwUserIndex: Default::default(),
+            Position: Default::default(),
+            SkeletonPositions: Default::default(),
+            eSkeletonPositionTrackingState: Default::default(),
+            dwQualityFlags: Default::default(),
+        }
+    }
+}
+
+impl Default for NUI_SKELETON_FRAME {
+    fn default() -> Self {
+        Self {
+            liTimeStamp: Default::default(),
+            dwFrameNumber: Default::default(),
+            dwFlags: Default::default(),
+            vFloorClipPlane: Default::default(),
+            vNormalToGravity: Default::default(),
+            SkeletonData: Default::default(),
+        }
+    }
+}
+
 // impl Drop for NUI_IMAGE_FRAME {
 //     fn drop(&mut self) {
 //         todo!()

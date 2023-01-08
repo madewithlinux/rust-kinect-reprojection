@@ -8,6 +8,10 @@ use kinect1_sys::{
     NUI_IMAGE_RESOLUTION, NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA, NUI_INITIALIZE_FLAG_USES_COLOR,
     NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX, NUI_INITIALIZE_FLAG_USES_SKELETON, NUI_LOCKED_RECT,
 };
+pub use kinect1_sys::{
+    Vector4, NUI_SKELETON_DATA, NUI_SKELETON_FRAME, NUI_SKELETON_POSITION_TRACKING_STATE, NUI_SKELETON_TRACKING_STATE,
+};
+
 use tracing::info;
 use windows::Win32::{
     Foundation::WAIT_OBJECT_0,
@@ -42,6 +46,8 @@ pub struct ReceiverThreadArgs {
     pub depth_buffered_frame_limit: u32,
     pub use_extended_depth_range: bool,
 
+    pub skeleton_stream_flags: u32,
+
     pub frame_registration: FrameRegistrationType,
 }
 
@@ -65,6 +71,7 @@ impl Default for ReceiverThreadArgs {
             depth_stream_flags: 0,
             depth_buffered_frame_limit: 2,
             use_extended_depth_range: true,
+            skeleton_stream_flags: 0,
 
             // mapping: FrameMappingType::RemapColor,
             frame_registration: FrameRegistrationType::RemapDepth,
@@ -102,14 +109,20 @@ pub struct ReceiverThreadData {
     depth_frame_pixels: Vec<NUI_DEPTH_IMAGE_PIXEL>,
     depth_frame_points: Vec<NUI_DEPTH_IMAGE_POINT>,
 
+    skeleton_next_frame_event: windows::Win32::Foundation::HANDLE,
+    skeleton_frame: NUI_SKELETON_FRAME,
+
     coordinate_mapper: *mut INuiCoordinateMapper,
 
     // data to send
     have_rgba_data: bool,
     have_depth_data: bool,
+    have_skeleton_data: bool,
     processed_rgba: Vec<[u8; 4]>,
     processed_depth: Vec<u16>,
     processed_player_index: Vec<u8>,
+    /// indexes into depth data
+    processed_skeleton_points: [[usize; 20]; 6],
 }
 
 const FRAME_MS_TO_WAIT: u32 = 0;
@@ -148,13 +161,18 @@ impl ReceiverThreadData {
             depth_frame_pixels: vec![Default::default(); depth_width * depth_height],
             depth_frame_points: vec![Default::default(); depth_width * depth_height],
 
+            skeleton_next_frame_event: Default::default(),
+            skeleton_frame: Default::default(),
+
             coordinate_mapper: null_mut(),
 
             have_rgba_data: false,
             have_depth_data: false,
+            have_skeleton_data: false,
             processed_rgba: vec![Default::default(); color_width * color_height],
             processed_depth: vec![Default::default(); depth_width * depth_height],
             processed_player_index: vec![Default::default(); depth_width * depth_height],
+            processed_skeleton_points: Default::default(),
         };
         out.init();
         out
@@ -175,6 +193,8 @@ impl ReceiverThreadData {
         self.color_next_frame_event =
             unsafe { windows::Win32::System::Threading::CreateEventW(None, true, false, None).unwrap() };
         self.depth_next_frame_event =
+            unsafe { windows::Win32::System::Threading::CreateEventW(None, true, false, None).unwrap() };
+        self.skeleton_next_frame_event =
             unsafe { windows::Win32::System::Threading::CreateEventW(None, true, false, None).unwrap() };
 
         call_method!(
@@ -197,6 +217,13 @@ impl ReceiverThreadData {
             self.args.depth_buffered_frame_limit,
             std::mem::transmute(self.depth_next_frame_event),
             &mut self.depth_stream_handle
+        );
+
+        call_method!(
+            self.sensor,
+            NuiSkeletonTrackingEnable,
+            std::mem::transmute(self.skeleton_next_frame_event),
+            self.args.skeleton_stream_flags
         );
 
         call_method!(self.sensor, NuiGetCoordinateMapper, &mut self.coordinate_mapper);
@@ -368,6 +395,40 @@ impl ReceiverThreadData {
         self.have_depth_data = true;
     }
 
+    fn receive_skeleton_frame(&mut self) {
+        call_method!(
+            self.sensor,
+            NuiSkeletonGetNextFrame,
+            FRAME_MS_TO_WAIT,
+            &mut self.skeleton_frame
+        );
+
+        for (i, skeleton) in self.skeleton_frame.SkeletonData.iter().enumerate() {
+            for (j, skeleton_point) in skeleton.SkeletonPositions.iter().enumerate() {
+                let mut skeleton_point = skeleton_point.clone();
+                let mut color_point: NUI_COLOR_IMAGE_POINT = Default::default();
+                if skeleton_point.w != 0.0
+                    || skeleton_point.x != 0.0
+                    || skeleton_point.y != 0.0
+                    || skeleton_point.z != 0.0
+                {
+                    call_method!(
+                        self.coordinate_mapper,
+                        MapSkeletonPointToColorPoint,
+                        &mut skeleton_point,
+                        NUI_IMAGE_TYPE_COLOR,
+                        self.args.color_resolution,
+                        &mut color_point
+                    );
+                }
+                let color_index = (color_point.x as usize) + (color_point.y as usize) * self.color_width;
+                self.processed_skeleton_points[i][j] = color_index;
+            }
+        }
+
+        self.have_skeleton_data = true;
+    }
+
     pub fn wait_and_receive_next_frame(&mut self) -> FrameMessage {
         let width = self.color_width;
         let height = self.color_height;
@@ -378,9 +439,20 @@ impl ReceiverThreadData {
         // TODO: should we allow sending frames that are partial duplicates?
         let mut have_new_rgba_data = false;
         let mut have_new_depth_data = false;
+        let mut have_new_skeleton_data = false;
 
         loop {
-            unsafe { WaitForMultipleObjects(&[self.color_next_frame_event, self.depth_next_frame_event], false, 100) };
+            unsafe {
+                WaitForMultipleObjects(
+                    &[
+                        self.color_next_frame_event,
+                        self.depth_next_frame_event,
+                        self.skeleton_next_frame_event,
+                    ],
+                    false,
+                    100,
+                )
+            };
 
             if unsafe { WaitForSingleObject(self.color_next_frame_event, 0) } == WAIT_OBJECT_0 {
                 self.receive_color_frame();
@@ -390,12 +462,18 @@ impl ReceiverThreadData {
                 self.receive_depth_frame();
                 have_new_depth_data = true;
             }
+            if unsafe { WaitForSingleObject(self.skeleton_next_frame_event, 0) } == WAIT_OBJECT_0 {
+                self.receive_skeleton_frame();
+                have_new_skeleton_data = true;
+            }
 
             // only send a new frame message if we've got two matching frames
             if self.have_rgba_data
                 && self.have_depth_data
+                && self.have_skeleton_data
                 && have_new_rgba_data
                 && have_new_depth_data
+                && have_new_skeleton_data
                 && (self.color_frame_info.timestamp - self.depth_frame_info.timestamp).abs() <= MAX_ALLOWED_ELAPSED_TIME
                 && self.color_frame_info.timestamp != Default::default()
                 && self.depth_frame_info.timestamp != Default::default()
@@ -404,6 +482,16 @@ impl ReceiverThreadData {
             }
         }
 
+        // if self
+        //     .skeleton_frame
+        //     .SkeletonData
+        //     .iter()
+        //     .any(|&sk| format!("{:?}", sk) != format!("{:?}", NUI_SKELETON_DATA::default()))
+        // {
+        //     info!("skeleton_frame: {:?}", self.skeleton_frame);
+        //     info!("self.processed_skeleton_points: {:?}", self.processed_skeleton_points);
+        // }
+
         FrameMessage {
             width,
             height,
@@ -411,6 +499,8 @@ impl ReceiverThreadData {
             rgba: std::mem::take(&mut self.processed_rgba),
             depth: std::mem::take(&mut self.processed_depth),
             player_index: std::mem::take(&mut self.processed_player_index),
+            skeleton_frame: self.skeleton_frame,
+            skeleton_points: self.processed_skeleton_points,
             color_frame_info: self.color_frame_info,
             depth_frame_info: self.depth_frame_info,
         }
@@ -424,6 +514,8 @@ pub struct FrameMessage {
     pub rgba: Vec<[u8; 4]>,
     pub depth: Vec<u16>,
     pub player_index: Vec<u8>,
+    pub skeleton_frame: NUI_SKELETON_FRAME,
+    pub skeleton_points: [[usize; 20]; 6],
     // raw fields from the kinect itself
     pub color_frame_info: ImageFrameInfo,
     pub depth_frame_info: ImageFrameInfo,
