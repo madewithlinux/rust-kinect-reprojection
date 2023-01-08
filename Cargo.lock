@@ -3190,6 +3190,45 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f61fba1741ea2b3d6a1e3178721804bb716a68a6aeba1149b5d52e3d464ea66"
 
 [[package]]
+name = "openvr"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93a827c3232d7e9065068234b794ab61aed3381ba40e97d99fac85a469e23360"
+dependencies = [
+ "lazy_static",
+ "openvr_sys",
+]
+
+[[package]]
+name = "openvr-test"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "array2d",
+ "bytemuck",
+ "crossbeam",
+ "enumset",
+ "image 0.24.5",
+ "itertools",
+ "num",
+ "num-derive",
+ "num-traits",
+ "openvr",
+ "ordered-float",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "openvr_sys"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46af40862e3c6be0c176d4b8cf1f7af0f8038cfb500e9cd57c82ad945a29b4b8"
+dependencies = [
+ "cmake",
+]
+
+[[package]]
 name = "orbclient"
 version = "0.3.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3611,6 +3650,7 @@ dependencies = [
  "image 0.24.5",
  "itertools",
  "kinect1",
+ "openvr",
  "rfd",
  "smooth-bevy-cameras",
  "thiserror",

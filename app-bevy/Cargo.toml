@@ -33,3 +33,5 @@ bytemuck = "1.12.3"
 # smooth-bevy-cameras = "0.6.0"
 bevy-aabb-instancing = { git = "https://github.com/foresightminingsoftwarecorporation/bevy-aabb-instancing" }
 smooth-bevy-cameras = { git = "https://github.com/olegomon/smooth-bevy-cameras" }
+
+openvr = "0.6.0"

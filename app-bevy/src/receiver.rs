@@ -48,7 +48,7 @@ impl KinectDepthTransformer {
             sensor_tilt_angle_deg,
             kinect_position: Vec3::new(-0.077, 2.4273, 1.9451) * 1_000.0,
             kinect_rot_deg: Vec3::new(33.0, 0.0, 0.0),
-            kinect_scale: Vec3::new(1.0, -1.0, 1.0),
+            kinect_scale: Vec3::new(-1.0, -1.0, -1.0),
             point_transform_matrix,
             point_transform_matrix_inverse: Affine3A::IDENTITY,
         }
@@ -98,6 +98,7 @@ impl KinectDepthTransformer {
 pub struct KinectPostProcessorConfig {
     pub history_buffer_size: usize,
     pub depth_threshold: f32,
+    /// deprecated
     pub sensor_tilt_angle_deg: f32,
     pub baseline_threshold_background_removal_enabled: bool,
 }
@@ -238,7 +239,6 @@ pub fn try_load_baseline_frame(path: impl AsRef<std::path::Path>) -> Vec<u16> {
 }
 
 fn setup_kinect_receiver(world: &mut World) {
-    // let receiver = start_frame_thread();
     let receiver = start_frame_thread2();
     world.insert_non_send_resource(KinectReceiver(receiver));
     world.insert_resource(KinectDepthTransformer::new());

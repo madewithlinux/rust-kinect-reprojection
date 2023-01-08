@@ -6,6 +6,8 @@ pub mod frame_display;
 pub mod frame_visualization_util;
 pub mod point_cloud;
 pub mod receiver;
+mod util;
+pub mod vr_connector;
 
 pub const COLOR_WIDTH: usize = 640;
 pub const COLOR_HEIGHT: usize = 480;
@@ -28,6 +30,7 @@ pub fn app_main() {
         // .add_plugin(frame_display::FrameDisplayPlugin)
         .add_plugin(point_cloud::PointCloudPlugin)
         .add_plugin(dock_ui::AppUiDockPlugin)
+        .add_plugin(vr_connector::VrConnectorPlugin)
         .register_type::<MainCamera>()
         .run();
 }

@@ -6,6 +6,7 @@ members=[
     "app-bevy",
     "kinect1",
     "kinect1-sys",
+    "openvr-test",
     # "kinect1-cc",
     # "kinect1-autocxx",
 ]

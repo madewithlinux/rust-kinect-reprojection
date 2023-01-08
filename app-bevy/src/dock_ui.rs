@@ -103,8 +103,8 @@ struct UiState {
 impl UiState {
     pub fn new() -> Self {
         let mut tree = Tree::new(vec![
-            Window::FrameBuffer(FrameBufferDescriptor::CurrentColor),
             Window::GameView,
+            Window::FrameBuffer(FrameBufferDescriptor::CurrentColor),
             Window::FrameBuffer(FrameBufferDescriptor::PointCloud),
             // Window::FrameBuffer(FrameBufferDescriptor::ActiveColor),
             // Window::FrameBuffer(FrameBufferDescriptor::ActiveDepth),

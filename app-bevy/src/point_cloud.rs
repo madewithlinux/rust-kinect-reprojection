@@ -105,7 +105,7 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
                 mouse_translate_sensitivity: Vec2::splat(100.0),
                 ..Default::default()
             },
-            Vec3::new(-1.0, 1.0, -1.0) * 3_000.0,
+            Vec3::new(1.0, 1.0, 1.0) * 3_000.0,
             Vec3::new(1.0, 0.0, 1.0) * 1_000.0,
         ))
         .insert(MainCamera);
