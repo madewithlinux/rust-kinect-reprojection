@@ -14,7 +14,7 @@ use smooth_bevy_cameras::{
 
 use crate::{
     dock_ui::MainCamera,
-    receiver::{convert_depth_to_xyz, KinectFrameBuffers, KinectPostProcessorConfig},
+    receiver::{KinectDepthTransformer, KinectFrameBuffers, KinectPostProcessorConfig},
     DEPTH_HEIGHT, DEPTH_WIDTH,
 };
 
@@ -33,6 +33,7 @@ impl Plugin for PointCloudPlugin {
             // .add_system(update_scalar_hue_options)
             .add_system(update_cuboid_position_color)
             .add_system(skeleton_lines)
+            .add_system(axis_references)
             // .register_type::<BufferIndexes>()
             ;
     }
@@ -114,12 +115,10 @@ fn update_cuboid_position_color(
     // buffers: Query<&KinectFrameBuffers>,
     data_source_query: Query<(&KinectPostProcessorConfig, &KinectFrameBuffers)>,
     mut cuboids_query: Query<(&BufferIndexes, &mut Cuboids, &mut Aabb)>,
+    depth_transformer: Res<KinectDepthTransformer>,
 ) {
     // let buffers = buffers.single();
     let (config, buffers) = data_source_query.single();
-
-    // TODO: use a real correction factor instead of this
-    let point_transform = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0);
 
     for (buffer_indexes, mut cuboids, mut aabb) in cuboids_query.iter_mut() {
         assert_eq!(buffer_indexes.indexes.len(), cuboids.instances.len());
@@ -134,24 +133,8 @@ fn update_cuboid_position_color(
                 cuboids.instances[i].minimum = Vec3::ZERO;
                 cuboids.instances[i].maximum = Vec3::splat(1.0);
             } else {
-                let pixel_pos = convert_depth_to_xyz(
-                    DEPTH_WIDTH as f32,
-                    DEPTH_HEIGHT as f32,
-                    x as f32,
-                    // (DEPTH_HEIGHT as u32 - y) as f32,
-                    y as f32,
-                    depth as f32,
-                );
-                let neighbor_pos = convert_depth_to_xyz(
-                    DEPTH_WIDTH as f32,
-                    DEPTH_HEIGHT as f32,
-                    (x + 1) as f32,
-                    // (DEPTH_HEIGHT as u32 - y + 1) as f32,
-                    (y + 1) as f32,
-                    depth as f32,
-                );
-                let pixel_pos = point_transform.transform_vector3(pixel_pos);
-                let neighbor_pos = point_transform.transform_vector3(neighbor_pos);
+                let pixel_pos = depth_transformer.coordinate_depth_to_xyz(x as usize, y as usize, depth);
+                let neighbor_pos = depth_transformer.coordinate_depth_to_xyz((x + 1) as usize, (y + 1) as usize, depth);
                 let point_width = pixel_pos.distance(neighbor_pos) / 2.0;
                 // let point_cuboid_depth: f32 = 50.0;
                 // let point_cuboid_depth: f32 = point_width;
@@ -193,24 +176,28 @@ fn adjacent_depth_difference(depth_frame: &Vec<u16>, x: usize, y: usize, min: f3
 fn skeleton_lines(
     data_source_query: Query<(&KinectPostProcessorConfig, &KinectFrameBuffers)>,
     mut lines: ResMut<DebugLines>,
+    depth_transformer: Res<KinectDepthTransformer>,
 ) {
     let (config, buffers) = data_source_query.single();
-    // TODO: use a real correction factor instead of this
-    let point_transform = Affine3A::from_rotation_x(config.sensor_tilt_angle_deg * PI / 180.0);
 
     for &skeleton in buffers.current_frame.skeleton_frame.skeleton_data.iter() {
         if skeleton.tracking_state == SkeletonTrackingState::NotTracked {
+            info!("skip skeleton");
             continue;
         }
-        let skeleton_points = skeleton.skeleton_pixel_indexes
-            .iter()
-            .flat_map(|&idx| buffers.point_cloud.get_row_major(idx))
-            .map(|&pos| point_transform.transform_vector3(pos))
-            .collect_vec();
-        let start = skeleton_points[0];
-        for &end in skeleton_points.iter() {
-            let duration = 0.0; // Duration of 0 will show the line for 1 frame.
-            lines.line(start, end, duration);
+
+        for bone in skeleton.get_skeleton_bones() {
+            let Some((start_xyz, end_xyz)) = depth_transformer.skeleton_bone_to_xyz(&bone, &buffers.derived_frame.depth) else {
+                continue;
+            };
+            lines.line(start_xyz, end_xyz, 0.0);
         }
     }
+}
+
+fn axis_references(mut lines: ResMut<DebugLines>) {
+    let scale = 1000.0;
+    lines.line_colored(Vec3::ZERO, Vec3::X * scale, 0.0, Color::RED);
+    lines.line_colored(Vec3::ZERO, Vec3::Y * scale, 0.0, Color::GREEN);
+    lines.line_colored(Vec3::ZERO, Vec3::Z * scale, 0.0, Color::BLUE);
 }

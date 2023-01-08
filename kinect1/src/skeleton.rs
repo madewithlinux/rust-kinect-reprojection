@@ -33,7 +33,7 @@ use ordered_float::OrderedFloat;
 pub const SKELETON_POSITION_COUNT: usize = _NUI_SKELETON_POSITION_INDEX_NUI_SKELETON_POSITION_COUNT as usize;
 pub const SKELETON_COUNT: usize = NUI_SKELETON_COUNT as usize;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, FromPrimitive, ToPrimitive)]
 pub enum SkeletonPositionIndex {
     #[default]
     HipCenter = kinect1_sys::_NUI_SKELETON_POSITION_INDEX_NUI_SKELETON_POSITION_HIP_CENTER as isize,
@@ -116,6 +116,62 @@ pub struct SkeletonData {
     pub quality_flags: EnumSet<SkeletonQualityFlags>,
     /// additional data, not directly from the API. indexes into depth data
     pub skeleton_pixel_indexes: [usize; SKELETON_POSITION_COUNT],
+}
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SkeletonPositionData {
+    pub index: SkeletonPositionIndex,
+    pub position: SkVector4,
+    pub tracking_state: SkeletonPositionTrackingState,
+    pub pixel_index: usize,
+}
+
+pub const SKELETON_BONES_COUNT: usize = 19;
+pub const SKELETON_BONES_INDEXES: [[SkeletonPositionIndex; 2]; SKELETON_BONES_COUNT] = [
+    [SkeletonPositionIndex::Head, SkeletonPositionIndex::ShoulderCenter],
+    [
+        SkeletonPositionIndex::ShoulderCenter,
+        SkeletonPositionIndex::ShoulderLeft,
+    ],
+    [
+        SkeletonPositionIndex::ShoulderCenter,
+        SkeletonPositionIndex::ShoulderRight,
+    ],
+    [SkeletonPositionIndex::ShoulderCenter, SkeletonPositionIndex::Spine],
+    [SkeletonPositionIndex::Spine, SkeletonPositionIndex::HipCenter],
+    [SkeletonPositionIndex::HipCenter, SkeletonPositionIndex::HipLeft],
+    [SkeletonPositionIndex::HipCenter, SkeletonPositionIndex::HipRight],
+    [SkeletonPositionIndex::ShoulderLeft, SkeletonPositionIndex::ElbowLeft],
+    [SkeletonPositionIndex::ElbowLeft, SkeletonPositionIndex::WristLeft],
+    [SkeletonPositionIndex::WristLeft, SkeletonPositionIndex::HandLeft],
+    [SkeletonPositionIndex::ShoulderRight, SkeletonPositionIndex::ElbowRight],
+    [SkeletonPositionIndex::ElbowRight, SkeletonPositionIndex::WristRight],
+    [SkeletonPositionIndex::WristRight, SkeletonPositionIndex::HandRight],
+    [SkeletonPositionIndex::HipLeft, SkeletonPositionIndex::KneeLeft],
+    [SkeletonPositionIndex::KneeLeft, SkeletonPositionIndex::AnkleLeft],
+    [SkeletonPositionIndex::AnkleLeft, SkeletonPositionIndex::FootLeft],
+    [SkeletonPositionIndex::HipRight, SkeletonPositionIndex::KneeRight],
+    [SkeletonPositionIndex::KneeRight, SkeletonPositionIndex::AnkleRight],
+    [SkeletonPositionIndex::AnkleRight, SkeletonPositionIndex::FootRight],
+];
+
+impl SkeletonData {
+    pub fn get_skeleton_position_data(&self, index: SkeletonPositionIndex) -> SkeletonPositionData {
+        let i: usize = index.to_usize().unwrap();
+        SkeletonPositionData {
+            index,
+            position: self.skeleton_positions[i],
+            tracking_state: self.skeleton_position_tracking_state[i],
+            pixel_index: self.skeleton_pixel_indexes[i],
+        }
+    }
+    pub fn get_skeleton_bones(&self) -> [[SkeletonPositionData; 2]; 19] {
+        SKELETON_BONES_INDEXES.map(|[start, end]| {
+            [
+                self.get_skeleton_position_data(start),
+                self.get_skeleton_position_data(end),
+            ]
+        })
+    }
 }
 
 fn map_skeleton_values<T, U: Default, F: FnMut(&T) -> U>(
