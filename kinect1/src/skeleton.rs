@@ -87,6 +87,7 @@ pub enum SkeletonQualityFlags {
 pub type SkVector4 = [OrderedFloat<f32>; 4];
 
 pub(crate) fn vector4_to_sk_vector4(v: &kinect1_sys::Vector4) -> SkVector4 {
+    // TODO: I suspect this is incorrect, and w is actually the last component
     [
         OrderedFloat(v.w),
         OrderedFloat(v.x),

@@ -6,16 +6,18 @@ use bevy_inspector_egui::bevy_inspector::hierarchy::{hierarchy_ui, SelectedEntit
 use bevy_inspector_egui::bevy_inspector::{
     self, ui_for_entities_shared_components, ui_for_entity, ui_for_entity_with_children,
 };
-use bevy_inspector_egui::DefaultInspectorConfigPlugin;
+use bevy_inspector_egui::{reflect_inspector, DefaultInspectorConfigPlugin};
 use bevy_reflect::TypeRegistry;
 use bevy_render::camera::{CameraProjection, Viewport};
 use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
 use image::{ImageBuffer, Luma};
+use kinect1::skeleton::SkeletonTrackingState;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
 use crate::receiver::{load_baseline_frame, KinectFrameBuffers};
+use crate::vr_connector::OpenVrPoseData;
 use crate::{COLOR_HEIGHT, COLOR_WIDTH};
 
 pub struct AppUiDockPlugin;
@@ -127,7 +129,15 @@ impl UiState {
                 // Window::Inspector,
             ],
         );
-        let [_bottom, _controls] = tree.split_below(hierarchy, 0.5, vec![Window::Inspector, Window::Controls]);
+        let [_bottom, _controls] = tree.split_below(
+            hierarchy,
+            0.5,
+            vec![
+                Window::Controls,
+                Window::Inspector,
+                //
+            ],
+        );
 
         Self {
             tree,
@@ -204,7 +214,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                     bevy_inspector::by_type_id::ui_for_asset(self.world, type_id, handle, ui, &type_registry);
                 }
             },
-            Window::Controls => ui_controls(ui, self.world),
+            Window::Controls => ui_controls(ui, self.world, &type_registry),
             Window::FrameBuffer(frame_buffer_name) => {
                 ui.label(format!("{:?}", frame_buffer_name));
                 let (image_handle, texture_id) = self.world.resource_scope::<bevy_egui::EguiContext, _>(
@@ -244,7 +254,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
     }
 }
 
-fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
+fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistry) {
     let pool = bevy::tasks::AsyncComputeTaskPool::get();
 
     ui.vertical(|ui| {
@@ -289,6 +299,69 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World) {
                     .depth_baseline_frame = load_baseline_frame(depth_filename).unwrap();
             }
         }
+
+        ui.heading("VR");
+        egui::Grid::new("vr")
+            .num_columns(2)
+            .spacing([40.0, 4.0])
+            .striped(true)
+            .show(ui, |ui| {
+                let vr_pose_data = world.resource::<OpenVrPoseData>();
+
+                ui.label("hmd");
+                reflect_inspector::ui_for_value_readonly(&vr_pose_data.hmd.position, ui, type_registry);
+                ui.end_row();
+
+                ui.label("left_controller");
+                reflect_inspector::ui_for_value_readonly(&vr_pose_data.left_controller.position, ui, type_registry);
+                ui.end_row();
+
+                ui.label("right_controller");
+                reflect_inspector::ui_for_value_readonly(&vr_pose_data.right_controller.position, ui, type_registry);
+                ui.end_row();
+
+                ui.label("controllers dist");
+                reflect_inspector::ui_for_value_readonly(
+                    &(vr_pose_data.left_controller.position - vr_pose_data.right_controller.position).length(),
+                    ui,
+                    type_registry,
+                );
+                ui.end_row();
+            });
+
+        ui.heading("Skeleton");
+        egui::Grid::new("skeleton")
+            .num_columns(2)
+            .spacing([40.0, 4.0])
+            .striped(true)
+            .show(ui, |ui| {
+                let frame_buffers = world.query::<&KinectFrameBuffers>().single(world);
+                let skeleton_frame = &frame_buffers.current_frame.skeleton_frame;
+                let Some(skeleton) = skeleton_frame.skeleton_data.iter()
+                    .find(|sk| sk.tracking_state == SkeletonTrackingState::Tracked)
+                     else {
+                        return;
+                     };
+                let left_hand = skeleton.get_skeleton_position_data(kinect1::skeleton::SkeletonPositionIndex::HandLeft);
+                let right_hand =
+                    skeleton.get_skeleton_position_data(kinect1::skeleton::SkeletonPositionIndex::HandRight);
+
+                let left_hand_position = Vec4::from_array(left_hand.position.map(|e| e.0)) * 1_000.0;
+                let right_hand_position = Vec4::from_array(right_hand.position.map(|e| e.0)) * 1_000.0;
+                let hand_dist = (left_hand_position - right_hand_position).length();
+
+                ui.label("left hand");
+                reflect_inspector::ui_for_value_readonly(&left_hand_position, ui, type_registry);
+                ui.end_row();
+
+                ui.label("right hand");
+                reflect_inspector::ui_for_value_readonly(&right_hand_position, ui, type_registry);
+                ui.end_row();
+
+                ui.label("hand dist");
+                reflect_inspector::ui_for_value_readonly(&hand_dist, ui, type_registry);
+                ui.end_row();
+            });
     });
 }
 
