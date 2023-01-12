@@ -27,6 +27,7 @@ pub struct KinectDepthTransformer {
     pub kinect_scale: Vec3,
     pub point_transform_matrix: Affine3A,
     pub point_transform_matrix_inverse: Affine3A,
+    pub point_cloud_skel: bool,
 }
 fn update_depth_transformer(mut kdt: ResMut<KinectDepthTransformer>) {
     kdt.point_transform_matrix = Affine3A::IDENTITY
@@ -51,6 +52,7 @@ impl KinectDepthTransformer {
             kinect_scale: Vec3::new(-1.0, -1.0, -1.0),
             point_transform_matrix,
             point_transform_matrix_inverse: Affine3A::IDENTITY,
+            point_cloud_skel: false,
         }
     }
     pub fn skeleton_bone_to_xyz(&self, bone: &[SkeletonPositionData; 2], depth_frame: &[u16]) -> Option<(Vec3, Vec3)> {

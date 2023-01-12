@@ -119,6 +119,7 @@ fn update_cuboid_position_color(
 ) {
     // let buffers = buffers.single();
     let (config, buffers) = data_source_query.single();
+    let skeleton_points = &buffers.current_frame.skeleton_points;
 
     for (buffer_indexes, mut cuboids, mut aabb) in cuboids_query.iter_mut() {
         assert_eq!(buffer_indexes.indexes.len(), cuboids.instances.len());
@@ -133,9 +134,30 @@ fn update_cuboid_position_color(
                 cuboids.instances[i].minimum = Vec3::ZERO;
                 cuboids.instances[i].maximum = Vec3::splat(1.0);
             } else {
-                let pixel_pos = depth_transformer.coordinate_depth_to_xyz(x as usize, y as usize, depth);
-                let neighbor_pos = depth_transformer.coordinate_depth_to_xyz((x + 1) as usize, (y + 1) as usize, depth);
-                let point_width = pixel_pos.distance(neighbor_pos) / 2.0;
+                let (pixel_pos, point_width) = if depth_transformer.point_cloud_skel {
+                    let pixel_pos = depth_transformer
+                        .point_transform_matrix
+                        .transform_point3(skeleton_points[flat_index] * 1_000.0 * Vec3::new(1.0, -1.0, 1.0));
+                    let point_width = if x > 0 {
+                        // let neighbor_pos = skeleton_points[flat_index - 1] * 1_000.0;
+                        // pixel_pos.distance(neighbor_pos) / 2.0
+                        let pixel_pos = depth_transformer.coordinate_depth_to_xyz(x as usize, y as usize, depth);
+                        let neighbor_pos =
+                            depth_transformer.coordinate_depth_to_xyz((x + 1) as usize, (y + 1) as usize, depth);
+                        pixel_pos.distance(neighbor_pos) / 2.0
+                    } else {
+                        10.0
+                    };
+                    (pixel_pos, point_width)
+                } else {
+                    let pixel_pos = depth_transformer.coordinate_depth_to_xyz(x as usize, y as usize, depth);
+                    let neighbor_pos =
+                        depth_transformer.coordinate_depth_to_xyz((x + 1) as usize, (y + 1) as usize, depth);
+                    let point_width = pixel_pos.distance(neighbor_pos) / 2.0;
+                    (pixel_pos, point_width)
+                };
+                // let neighbor_pos = skeleton_points[(flat_index + 1) % skeleton_points.len()] * 1_000.0;
+
                 // let point_cuboid_depth: f32 = 50.0;
                 // let point_cuboid_depth: f32 = point_width;
                 let point_cuboid_depth: f32 =

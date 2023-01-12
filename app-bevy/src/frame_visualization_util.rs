@@ -16,6 +16,7 @@ pub enum FrameBufferDescriptor {
     ActiveDepth,
     ActiveColor,
     PointCloud,
+    SkeletonPointCloud,
 }
 
 fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, image_data: &mut [u8]) {
@@ -34,7 +35,11 @@ fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, 
             player_index_frame_to_pixels(&buffers.derived_frame.player_index, image_data)
         }
         FrameBufferDescriptor::PointCloud => point_cloud_to_pixels(&buffers.point_cloud, image_data),
+        FrameBufferDescriptor::SkeletonPointCloud => {
+            vec3_cloud_to_pixels(&buffers.current_frame.skeleton_points, image_data, 1_000.0)
+        }
     }
+
 }
 
 #[derive(Component, Reflect)]
@@ -66,6 +71,18 @@ fn depth_frame_to_pixels(depth_frame: &[u16], image_data: &mut [[u8; 4]]) {
     for (i, &depth) in depth_frame.iter().enumerate() {
         let depth = depth << 3;
         image_data[i] = [(depth % 256) as u8, (depth / 256) as u8, 0, 255];
+    }
+}
+
+fn vec3_cloud_to_pixels(point_cloud: &[Vec3], image_data: &mut [[u8; 4]], scale: f32) {
+    assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH);
+    for (i, v) in point_cloud.iter().enumerate() {
+        image_data[i] = [
+            ((v.x.abs() * scale) % 256.0) as u8,
+            ((v.y.abs() * scale) % 256.0) as u8,
+            ((v.z.abs() * scale) % 256.0) as u8,
+            255,
+        ];
     }
 }
 

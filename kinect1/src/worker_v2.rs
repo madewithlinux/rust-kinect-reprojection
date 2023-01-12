@@ -2,6 +2,7 @@ use std::ptr::null_mut;
 
 use bytemuck::cast_slice;
 
+use glam::Vec3;
 use kinect1_sys::{
     INuiCoordinateMapper, INuiFrameTexture, INuiSensor, NuiCreateSensorByIndex, NuiDepthPixelToDepth,
     NuiDepthPixelToPlayerIndex, NUI_COLOR_IMAGE_POINT, NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME,
@@ -111,6 +112,7 @@ pub struct ReceiverThreadData {
     // depth_frame_data: Vec<u16>,
     depth_frame_pixels: Vec<NUI_DEPTH_IMAGE_PIXEL>,
     depth_frame_points: Vec<NUI_DEPTH_IMAGE_POINT>,
+    skeleton_points: Vec<Vector4>,
 
     skeleton_next_frame_event: windows::Win32::Foundation::HANDLE,
     skeleton_frame: NUI_SKELETON_FRAME,
@@ -125,6 +127,7 @@ pub struct ReceiverThreadData {
     processed_depth: Vec<u16>,
     processed_player_index: Vec<u8>,
     processed_skeleton_frame: SkeletonFrame,
+    processed_skeleton_points: Vec<Vec3>,
 }
 
 const FRAME_MS_TO_WAIT: u32 = 0;
@@ -162,6 +165,7 @@ impl ReceiverThreadData {
             // depth_frame_data: vec![Default::default(); depth_width * depth_height],
             depth_frame_pixels: vec![Default::default(); depth_width * depth_height],
             depth_frame_points: vec![Default::default(); depth_width * depth_height],
+            skeleton_points: vec![Default::default(); depth_width * depth_height],
 
             skeleton_next_frame_event: Default::default(),
             skeleton_frame: Default::default(),
@@ -175,6 +179,7 @@ impl ReceiverThreadData {
             processed_depth: vec![Default::default(); depth_width * depth_height],
             processed_player_index: vec![Default::default(); depth_width * depth_height],
             processed_skeleton_frame: Default::default(),
+            processed_skeleton_points: vec![Default::default(); depth_width * depth_height],
         };
         out.init();
         out
@@ -388,6 +393,30 @@ impl ReceiverThreadData {
                 self.processed_depth[i] = pixel.depth;
                 self.processed_player_index[i] = pixel.playerIndex as u8;
             }
+
+            call_method!(
+                self.coordinate_mapper,
+                MapColorFrameToSkeletonFrame,
+                NUI_IMAGE_TYPE_COLOR,
+                self.args.color_resolution,
+                self.args.depth_resolution,
+                self.depth_frame_pixels.len() as u32,
+                self.depth_frame_pixels.as_mut_ptr(),
+                self.skeleton_points.len() as u32,
+                self.skeleton_points.as_mut_ptr()
+            );
+
+            for (i, &p) in self.skeleton_points.iter().enumerate() {
+                // self.processed_skeleton_points[i] = Vec3::new(p.x, p.y, p.z);
+                self.processed_skeleton_points[i] = if p.w == 0.0 {
+                    // Vec3::default()
+                    Vec3::new(p.x, p.y, p.z)
+                } else if p.w == 1.0 {
+                    Vec3::new(p.x, p.y, p.z)
+                } else {
+                    panic!("unhandled value for w: {}", p.w);
+                };
+            }
         } else {
             for (i, &depth_pixel) in self.depth_frame_pixels.iter().enumerate() {
                 self.processed_depth[i] = depth_pixel.depth;
@@ -447,6 +476,7 @@ impl ReceiverThreadData {
         self.processed_rgba.resize(width * height, Default::default());
         self.processed_depth.resize(width * height, Default::default());
         self.processed_player_index.resize(width * height, Default::default());
+        self.processed_skeleton_points.resize(width * height, Default::default());
 
         // TODO: should we allow sending frames that are partial duplicates?
         let mut have_new_rgba_data = false;
@@ -502,6 +532,7 @@ impl ReceiverThreadData {
             depth: std::mem::take(&mut self.processed_depth),
             player_index: std::mem::take(&mut self.processed_player_index),
             skeleton_frame: std::mem::take(&mut self.processed_skeleton_frame),
+            skeleton_points: std::mem::take(&mut self.processed_skeleton_points),
             color_frame_info: self.color_frame_info,
             depth_frame_info: self.depth_frame_info,
         }
@@ -516,6 +547,7 @@ pub struct FrameMessage {
     pub depth: Vec<u16>,
     pub player_index: Vec<u8>,
     pub skeleton_frame: SkeletonFrame,
+    pub skeleton_points: Vec<Vec3>,
 
     // raw fields from the kinect itself
     pub color_frame_info: ImageFrameInfo,

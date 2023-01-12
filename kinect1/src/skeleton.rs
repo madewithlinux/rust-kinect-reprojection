@@ -89,23 +89,23 @@ pub type SkVector4 = [OrderedFloat<f32>; 4];
 pub(crate) fn vector4_to_sk_vector4(v: &kinect1_sys::Vector4) -> SkVector4 {
     // TODO: I suspect this is incorrect, and w is actually the last component
     [
-        OrderedFloat(v.w),
         OrderedFloat(v.x),
         OrderedFloat(v.y),
         OrderedFloat(v.z),
+        OrderedFloat(v.w),
     ]
 }
 
 pub(crate) fn sk_vector4_to_vector4(v: &SkVector4) -> kinect1_sys::Vector4 {
     kinect1_sys::Vector4 {
-        w: v[0].0,
-        x: v[1].0,
-        y: v[2].0,
-        z: v[3].0,
+        x: v[0].0,
+        y: v[1].0,
+        z: v[2].0,
+        w: v[3].0,
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SkeletonData {
     pub tracking_state: SkeletonTrackingState,
     pub tracking_id: u32,
@@ -118,7 +118,7 @@ pub struct SkeletonData {
     /// additional data, not directly from the API. indexes into depth data
     pub skeleton_pixel_indexes: [usize; SKELETON_POSITION_COUNT],
 }
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SkeletonPositionData {
     pub index: SkeletonPositionIndex,
     pub position: SkVector4,
@@ -204,7 +204,7 @@ impl From<&kinect1_sys::NUI_SKELETON_DATA> for SkeletonData {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone)]
 pub struct SkeletonFrame {
     pub timestamp: i64,
     pub frame_number: u32,

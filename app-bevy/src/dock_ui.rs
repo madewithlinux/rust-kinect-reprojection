@@ -108,6 +108,7 @@ impl UiState {
             Window::GameView,
             Window::FrameBuffer(FrameBufferDescriptor::CurrentColor),
             Window::FrameBuffer(FrameBufferDescriptor::PointCloud),
+            Window::FrameBuffer(FrameBufferDescriptor::SkeletonPointCloud),
             // Window::FrameBuffer(FrameBufferDescriptor::ActiveColor),
             // Window::FrameBuffer(FrameBufferDescriptor::ActiveDepth),
             // Window::FrameBuffer(FrameBufferDescriptor::CurrentDepth),
