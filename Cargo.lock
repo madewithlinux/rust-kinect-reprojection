@@ -3653,6 +3653,7 @@ dependencies = [
  "itertools",
  "kinect1",
  "openvr",
+ "ordered-float",
  "rfd",
  "smooth-bevy-cameras",
  "thiserror",

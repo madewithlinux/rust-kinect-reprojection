@@ -20,51 +20,54 @@ pub struct KinectDepthTransformer {
     pub pixel_width: usize,
     pub width: f32,
     pub height: f32,
-    // TODO: add coordinate offset as well
-    pub sensor_tilt_angle_deg: f32,
     pub kinect_position: Vec3,
     pub kinect_rot_deg: Vec3,
     pub kinect_scale: Vec3,
-    pub point_transform_matrix: Affine3A,
-    pub point_transform_matrix_inverse: Affine3A,
+    point_transform_matrix: Affine3A,
+    point_transform_matrix_inverse: Affine3A,
     pub point_cloud_skel: bool,
 }
 fn update_depth_transformer(mut kdt: ResMut<KinectDepthTransformer>) {
-    kdt.point_transform_matrix = Affine3A::IDENTITY
-        * Affine3A::from_rotation_x(kdt.kinect_rot_deg.x * PI / 180.0)
-        * Affine3A::from_rotation_y(kdt.kinect_rot_deg.y * PI / 180.0)
-        * Affine3A::from_rotation_z(kdt.kinect_rot_deg.z * PI / 180.0)
-        * Affine3A::from_translation(kdt.kinect_position)
-        * Affine3A::from_scale(kdt.kinect_scale);
+    kdt.point_transform_matrix = Affine3A::from_scale_rotation_translation(
+        kdt.kinect_scale,
+        Quat::from_euler(
+            EulerRot::XYZ,
+            kdt.kinect_rot_deg.x * PI / 180.0,
+            kdt.kinect_rot_deg.y * PI / 180.0,
+            kdt.kinect_rot_deg.z * PI / 180.0,
+        ),
+        kdt.kinect_position,
+    );
     kdt.point_transform_matrix_inverse = kdt.point_transform_matrix.inverse();
 }
 impl KinectDepthTransformer {
     pub fn new() -> Self {
-        let sensor_tilt_angle_deg = -33.0;
-        let point_transform_matrix = Affine3A::from_rotation_x(sensor_tilt_angle_deg * PI / 180.0);
         Self {
             pixel_width: DEPTH_WIDTH,
             width: DEPTH_WIDTH as f32,
             height: DEPTH_HEIGHT as f32,
-            sensor_tilt_angle_deg,
-            kinect_position: Vec3::new(-0.077, 2.4273, 1.9451),
-            kinect_rot_deg: Vec3::new(33.0, 0.0, 0.0),
-            kinect_scale: Vec3::new(-1.0, -1.0, -1.0),
-            point_transform_matrix,
+            kinect_position: Vec3::new(0.18, 2.4273, 1.9451),
+            kinect_rot_deg: Vec3::new(-33.0, 180.0, 0.0),
+            kinect_scale: Vec3::new(1.0, 1.0, 1.0),
+            point_transform_matrix: Affine3A::IDENTITY,
             point_transform_matrix_inverse: Affine3A::IDENTITY,
-            point_cloud_skel: false,
+            point_cloud_skel: true,
         }
     }
-    pub fn skeleton_bone_to_xyz(&self, bone: &[SkeletonPositionData; 2], depth_frame: &[u16]) -> Option<(Vec3, Vec3)> {
+    pub fn skeleton_bone_to_world(
+        &self,
+        bone: &[SkeletonPositionData; 2],
+        depth_frame: &[u16],
+    ) -> Option<(Vec3, Vec3)> {
         match (
-            self.skeleton_position_to_xyz(&bone[0], depth_frame),
-            self.skeleton_position_to_xyz(&bone[1], depth_frame),
+            self.skeleton_position_to_world(&bone[0], depth_frame),
+            self.skeleton_position_to_world(&bone[1], depth_frame),
         ) {
             (Some(a), Some(b)) => Some((a, b)),
             _ => None,
         }
     }
-    pub fn skeleton_position_to_xyz(&self, pos: &SkeletonPositionData, depth_frame: &[u16]) -> Option<Vec3> {
+    pub fn skeleton_position_to_world(&self, pos: &SkeletonPositionData, depth_frame: &[u16]) -> Option<Vec3> {
         if pos.pixel_index >= depth_frame.len()
             || pos.pixel_index == 0
             || pos.tracking_state == SkeletonPositionTrackingState::NotTracked
@@ -75,24 +78,36 @@ impl KinectDepthTransformer {
         if depth == 0 {
             return None;
         }
-        Some(self.index_depth_to_xyz(pos.pixel_index, depth))
+        Some(self.index_depth_to_world(pos.pixel_index, depth))
     }
-    pub fn index_depth_to_xyz(&self, pixel_index: usize, depth_in_mm: u16) -> Vec3 {
-        let i = pixel_index % self.pixel_width;
-        let j = pixel_index / self.pixel_width;
-        self.coordinate_depth_to_xyz(i, j, depth_in_mm)
+
+    pub fn skeleton_point_to_world(&self, skeleton_point: Vec3) -> Vec3 {
+        self.point_transform_matrix.transform_point3(skeleton_point)
     }
-    pub fn coordinate_depth_to_xyz(&self, i: usize, j: usize, depth_in_mm: u16) -> Vec3 {
+
+    pub fn flat_index_to_ij(&self, flat_index: usize) -> (usize, usize) {
+        (flat_index % self.pixel_width, flat_index / self.pixel_width)
+    }
+    pub fn ij_to_flat_index(&self, i: usize, j: usize) -> usize {
+        i + j * self.pixel_width
+    }
+
+    pub fn index_depth_to_world(&self, flat_index: usize, depth_in_mm: u16) -> Vec3 {
+        let (i, j) = self.flat_index_to_ij(flat_index);
+        self.coordinate_depth_to_world(i, j, depth_in_mm)
+    }
+    pub fn coordinate_depth_to_world(&self, i: usize, j: usize, depth_in_mm: u16) -> Vec3 {
         let i = i as f32;
-        let j = j as f32;
+        let j = self.height - 1.0 - (j as f32);
         // ref https://openkinect.org/wiki/Imaging_Information
         let z = depth_in_mm as f32;
         let min_distance = -10.0;
         let scale_factor = 0.0021;
         let x = (i - self.width / 2.0) * (z + min_distance) * scale_factor;
         let y = (j - self.height / 2.0) * (z + min_distance) * scale_factor;
-        self.point_transform_matrix_inverse
-            .transform_point3(Vec3::new(x, y, z) / 1_000.0)
+        let world_point = Vec3::new(x, y, z) / 1_000.0;
+        let world_point = self.point_transform_matrix.transform_point3(world_point);
+        world_point
     }
 }
 
@@ -102,7 +117,6 @@ pub struct KinectPostProcessorConfig {
     pub history_buffer_size: usize,
     pub depth_threshold: f32,
     /// deprecated
-    pub sensor_tilt_angle_deg: f32,
     pub baseline_threshold_background_removal_enabled: bool,
 }
 impl Default for KinectPostProcessorConfig {
@@ -110,9 +124,6 @@ impl Default for KinectPostProcessorConfig {
         Self {
             history_buffer_size: 2,
             depth_threshold: 100.0,
-            // sensor_tilt_angle_deg: -33.0,
-            // sensor_tilt_angle_deg: 90.0,
-            sensor_tilt_angle_deg: 0.0,
             baseline_threshold_background_removal_enabled: false,
         }
     }
@@ -202,7 +213,7 @@ fn process_received_frame(
     for (index, &depth) in buffers.derived_frame.depth.iter().enumerate() {
         let i = index % buffers.derived_frame.width;
         let j = index / buffers.derived_frame.width;
-        buffers.point_cloud[(j as usize, i as usize)] = depth_transformer.index_depth_to_xyz(index, depth);
+        buffers.point_cloud[(j as usize, i as usize)] = depth_transformer.index_depth_to_world(index, depth);
     }
 }
 

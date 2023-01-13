@@ -98,6 +98,8 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
         .insert(MainCamera);
 }
 
+const POINT_WIDTH_FACTOR: f32 = 0.0014800;
+
 fn update_cuboid_position_color(
     buffers: Res<KinectFrameBuffers>,
     mut cuboids_query: Query<(&BufferIndexes, &mut Cuboids, &mut Aabb)>,
@@ -120,30 +122,16 @@ fn update_cuboid_position_color(
                 cuboids.instances[i].make_invisible();
             } else {
                 let (pixel_pos, point_width) = if depth_transformer.point_cloud_skel {
-                    let pixel_pos = depth_transformer
-                        .point_transform_matrix
-                        .transform_point3(skeleton_points[flat_index] * Vec3::new(1.0, -1.0, 1.0));
-                    let point_width = if x > 0 {
-                        // let neighbor_pos = skeleton_points[flat_index - 1];
-                        // pixel_pos.distance(neighbor_pos) / 2.0
-                        let pixel_pos = depth_transformer.coordinate_depth_to_xyz(x as usize, y as usize, depth);
-                        let neighbor_pos =
-                            depth_transformer.coordinate_depth_to_xyz((x + 1) as usize, (y + 1) as usize, depth);
-                        pixel_pos.distance(neighbor_pos) / 2.0
-                    } else {
-                        0.010
-                    };
+                    let skeleton_point = skeleton_points[flat_index];
+                    let pixel_pos = depth_transformer.skeleton_point_to_world(skeleton_point);
+                    let point_width = POINT_WIDTH_FACTOR * skeleton_point.z;
                     (pixel_pos, point_width)
                 } else {
-                    let pixel_pos = depth_transformer.coordinate_depth_to_xyz(x as usize, y as usize, depth);
-                    let neighbor_pos =
-                        depth_transformer.coordinate_depth_to_xyz((x + 1) as usize, (y + 1) as usize, depth);
-                    let point_width = pixel_pos.distance(neighbor_pos) / 2.0;
+                    let pixel_pos = depth_transformer.index_depth_to_world(flat_index, depth);
+                    let point_width = POINT_WIDTH_FACTOR * (depth as f32) / 1_000.0;
                     (pixel_pos, point_width)
                 };
-                // let neighbor_pos = skeleton_points[(flat_index + 1) % skeleton_points.len()];
 
-                // let point_cuboid_depth: f32 = 50.0;
                 // let point_cuboid_depth: f32 = point_width;
                 let point_cuboid_depth: f32 =
                     adjacent_depth_difference(&buffers.derived_frame.depth, x as usize, y as usize, point_width, 0.1);
@@ -193,7 +181,7 @@ fn skeleton_lines(
         }
 
         for bone in skeleton.get_skeleton_bones() {
-            let Some((start_xyz, end_xyz)) = depth_transformer.skeleton_bone_to_xyz(&bone, &buffers.derived_frame.depth) else {
+            let Some((start_xyz, end_xyz)) = depth_transformer.skeleton_bone_to_world(&bone, &buffers.derived_frame.depth) else {
                 continue;
             };
             let [start_color, end_color] = bone.map(|p| match p.tracking_state {
@@ -213,30 +201,28 @@ fn axis_references(mut lines: ResMut<DebugLines>, dt: Res<KinectDepthTransformer
     lines.line_colored(Vec3::ZERO, Vec3::Z * scale, 0.0, Color::BLUE);
 
     // references for the kinect itself
+    let start = dt.skeleton_point_to_world(Vec3::ZERO);
     lines.line_colored(
-        dt.point_transform_matrix_inverse.transform_point3(Vec3::ZERO),
-        dt.point_transform_matrix_inverse
-            .transform_point3(Vec3::X * scale / 2.0),
+        start,
+        dt.skeleton_point_to_world(Vec3::X * scale / 2.0),
         0.0,
         Color::RED,
     );
     lines.line_colored(
-        dt.point_transform_matrix_inverse.transform_point3(Vec3::ZERO),
-        dt.point_transform_matrix_inverse
-            .transform_point3(Vec3::Y * scale / 2.0),
+        start,
+        dt.skeleton_point_to_world(Vec3::Y * scale / 2.0),
         0.0,
         Color::GREEN,
     );
     lines.line_colored(
-        dt.point_transform_matrix_inverse.transform_point3(Vec3::ZERO),
-        dt.point_transform_matrix_inverse
-            .transform_point3(Vec3::Z * scale / 2.0),
+        start,
+        dt.skeleton_point_to_world(Vec3::Z * scale / 2.0),
         0.0,
         Color::BLUE,
     );
 }
 
-const REFERENCE_POINTS: [(Vec3, (usize, usize)); 3] = [
+pub const REFERENCE_POINTS: [(Vec3, (usize, usize)); 3] = [
     (Vec3::new(1.2902215, -0.021568049, -0.59659046), (136, 346)),
     (Vec3::new(-1.4719752, 0.45078325, -0.96842957), (570, 278)),
     (Vec3::new(1.1872808, 1.5832841, -0.95948), (134, 89)),
@@ -255,14 +241,11 @@ fn debug_coordinate_matchup(
 
     for (openvr_point, kinect_image_point) in REFERENCE_POINTS.iter() {
         let openvr_point = *openvr_point;
-        // let pixel_pos = skeleton_points[kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH];
-        let flat_index = kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH;
+        let flat_index = depth_transformer.ij_to_flat_index(kinect_image_point.0, kinect_image_point.1);
         let pixel_pos = if depth_transformer.point_cloud_skel {
-            depth_transformer
-                .point_transform_matrix
-                .transform_point3(skeleton_points[flat_index] * Vec3::new(1.0, -1.0, 1.0))
+            depth_transformer.skeleton_point_to_world(skeleton_points[flat_index])
         } else {
-            depth_transformer.coordinate_depth_to_xyz(kinect_image_point.0, kinect_image_point.1, depth[flat_index])
+            depth_transformer.index_depth_to_world(flat_index, depth[flat_index])
         };
 
         lines.line_colored(openvr_point, pixel_pos, 0.0, Color::YELLOW);
