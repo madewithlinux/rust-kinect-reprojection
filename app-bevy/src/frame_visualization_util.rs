@@ -36,7 +36,7 @@ fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, 
         }
         FrameBufferDescriptor::PointCloud => point_cloud_to_pixels(&buffers.point_cloud, image_data),
         FrameBufferDescriptor::SkeletonPointCloud => {
-            vec3_cloud_to_pixels(&buffers.current_frame.skeleton_points, image_data, 1.0)
+            vec3_cloud_to_pixels(&buffers.current_frame.skeleton_points, image_data, 1_000.0)
         }
     }
 }
@@ -45,18 +45,17 @@ fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, 
 pub struct FrameBufferImageHandle(pub FrameBufferDescriptor, pub Handle<Image>);
 
 pub fn update_framebuffer_images(
-    buffers: Query<&KinectFrameBuffers>,
+    buffers: Res<KinectFrameBuffers>,
     frame_buffer_handle_query: Query<&FrameBufferImageHandle>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let buffers = buffers.single();
     if buffers.derived_frame.depth.len() == 0 {
         return;
     }
 
     for FrameBufferImageHandle(buffer_name, handle) in frame_buffer_handle_query.iter() {
         if let Some(image) = images.get_mut(&handle) {
-            get_buffer(buffer_name, buffers, &mut image.data);
+            get_buffer(buffer_name, &buffers, &mut image.data);
         }
     }
 }
@@ -89,9 +88,9 @@ fn point_cloud_to_pixels(point_cloud: &Array2D<Vec3>, image_data: &mut [[u8; 4]]
     assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH);
     for (i, v) in point_cloud.elements_row_major_iter().enumerate() {
         image_data[i] = [
-            (v.x.abs() % 256.0) as u8,
-            (v.y.abs() % 256.0) as u8,
-            (v.z.abs() % 256.0) as u8,
+            ((v.x.abs() * 1_000.0) % 256.0) as u8,
+            ((v.y.abs() * 1_000.0) % 256.0) as u8,
+            ((v.z.abs() * 1_000.0) % 256.0) as u8,
             255,
         ];
     }

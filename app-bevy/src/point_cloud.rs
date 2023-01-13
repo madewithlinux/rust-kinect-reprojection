@@ -12,7 +12,7 @@ use smooth_bevy_cameras::{
 
 use crate::{
     dock_ui::MainCamera,
-    receiver::{KinectDepthTransformer, KinectFrameBuffers, KinectPostProcessorConfig},
+    receiver::{KinectDepthTransformer, KinectFrameBuffers},
     util::draw_debug_axes,
     DEPTH_HEIGHT, DEPTH_WIDTH,
 };
@@ -99,13 +99,10 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
 }
 
 fn update_cuboid_position_color(
-    // buffers: Query<&KinectFrameBuffers>,
-    data_source_query: Query<(&KinectPostProcessorConfig, &KinectFrameBuffers)>,
+    buffers: Res<KinectFrameBuffers>,
     mut cuboids_query: Query<(&BufferIndexes, &mut Cuboids, &mut Aabb)>,
     depth_transformer: Res<KinectDepthTransformer>,
 ) {
-    // let buffers = buffers.single();
-    let (config, buffers) = data_source_query.single();
     let skeleton_points = &buffers.current_frame.skeleton_points;
 
     for (buffer_indexes, mut cuboids, mut aabb) in cuboids_query.iter_mut() {
@@ -149,7 +146,7 @@ fn update_cuboid_position_color(
                 // let point_cuboid_depth: f32 = 50.0;
                 // let point_cuboid_depth: f32 = point_width;
                 let point_cuboid_depth: f32 =
-                    adjacent_depth_difference(&buffers.derived_frame.depth, x as usize, y as usize, point_width, 0.250);
+                    adjacent_depth_difference(&buffers.derived_frame.depth, x as usize, y as usize, point_width, 0.1);
                 let min = pixel_pos - Vec3::new(point_width, point_width, point_cuboid_depth);
                 let max = pixel_pos + Vec3::new(point_width, point_width, 0.0);
                 cuboids.instances[i].minimum = min;
@@ -185,12 +182,10 @@ fn adjacent_depth_difference(depth_frame: &Vec<u16>, x: usize, y: usize, min: f3
 }
 
 fn skeleton_lines(
-    data_source_query: Query<(&KinectPostProcessorConfig, &KinectFrameBuffers)>,
+    buffers: Res<KinectFrameBuffers>,
     mut lines: ResMut<DebugLines>,
     depth_transformer: Res<KinectDepthTransformer>,
 ) {
-    let (config, buffers) = data_source_query.single();
-
     for &skeleton in buffers.current_frame.skeleton_frame.skeleton_data.iter() {
         if skeleton.tracking_state == SkeletonTrackingState::NotTracked {
             info!("skip skeleton");
@@ -248,12 +243,10 @@ const REFERENCE_POINTS: [(Vec3, (usize, usize)); 3] = [
 ];
 
 fn debug_coordinate_matchup(
-    data_source_query: Query<(&KinectPostProcessorConfig, &KinectFrameBuffers)>,
+    buffers: Res<KinectFrameBuffers>,
     depth_transformer: Res<KinectDepthTransformer>,
     mut lines: ResMut<DebugLines>,
 ) {
-    let (config, buffers) = data_source_query.single();
-
     let depth = &buffers.current_frame.depth;
     let skeleton_points = &buffers.current_frame.skeleton_points;
     if skeleton_points.len() < 1 {

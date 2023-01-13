@@ -74,7 +74,7 @@ impl Default for ReceiverThreadArgs {
             depth_resolution: NUI_IMAGE_RESOLUTION_640X480,
             depth_stream_flags: 0,
             depth_buffered_frame_limit: 2,
-            use_extended_depth_range: true,
+            use_extended_depth_range: false,
             skeleton_stream_flags: 0,
 
             // mapping: FrameMappingType::RemapColor,

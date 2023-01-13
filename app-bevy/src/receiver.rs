@@ -91,12 +91,13 @@ impl KinectDepthTransformer {
         let scale_factor = 0.0021;
         let x = (i - self.width / 2.0) * (z + min_distance) * scale_factor;
         let y = (j - self.height / 2.0) * (z + min_distance) * scale_factor;
-        self.point_transform_matrix_inverse.transform_point3(Vec3::new(x, y, z) / 1_000.0)
+        self.point_transform_matrix_inverse
+            .transform_point3(Vec3::new(x, y, z) / 1_000.0)
     }
 }
 
-#[derive(Component, Debug, Clone, Reflect)]
-#[reflect(Debug)]
+#[derive(Resource, Debug, Clone, Reflect)]
+#[reflect(Debug, Resource)]
 pub struct KinectPostProcessorConfig {
     pub history_buffer_size: usize,
     pub depth_threshold: f32,
@@ -117,7 +118,7 @@ impl Default for KinectPostProcessorConfig {
     }
 }
 
-#[derive(Component)]
+#[derive(Resource)]
 pub struct KinectFrameBuffers {
     // viewable buffers
     pub current_frame: FrameMessage,
@@ -161,12 +162,12 @@ impl Default for KinectFrameBuffers {
 
 fn receive_kinect_current_frame(
     receiver: NonSend<KinectReceiver>,
-    mut current_frame_query: Query<(&KinectPostProcessorConfig, &mut KinectFrameBuffers)>,
+    config: Res<KinectPostProcessorConfig>,
+    mut buffers: ResMut<KinectFrameBuffers>,
     depth_transformer: Res<KinectDepthTransformer>,
 ) {
     if let Ok(received_frame) = receiver.0.try_recv() {
-        let (config, mut buffers) = current_frame_query.single_mut();
-        process_received_frame(received_frame, config, &mut buffers, &depth_transformer);
+        process_received_frame(received_frame, &config, &mut buffers, &depth_transformer);
     }
 }
 
@@ -244,14 +245,19 @@ fn setup_kinect_receiver(world: &mut World) {
     let receiver = start_frame_thread2();
     world.insert_non_send_resource(KinectReceiver(receiver));
     world.insert_resource(KinectDepthTransformer::new());
-    world.spawn((
-        Name::new("frame and buffer"),
-        KinectPostProcessorConfig::default(),
-        KinectFrameBuffers {
-            depth_baseline_frame: try_load_baseline_frame("kinect_depth_data_empty.png"),
-            ..Default::default()
-        },
-    ));
+    world.insert_resource(KinectPostProcessorConfig::default());
+    world.insert_resource(KinectFrameBuffers {
+        depth_baseline_frame: try_load_baseline_frame("kinect_depth_data_empty.png"),
+        ..Default::default()
+    });
+    // world.spawn((
+    //     Name::new("frame and buffer"),
+    //     KinectPostProcessorConfig::default(),
+    //     KinectFrameBuffers {
+    //         depth_baseline_frame: try_load_baseline_frame("kinect_depth_data_empty.png"),
+    //         ..Default::default()
+    //     },
+    // ));
 }
 
 pub struct KinectReceiverPlugin;

@@ -121,10 +121,10 @@ impl UiState {
             game,
             0.2,
             vec![
+                Window::Resources,
                 Window::Hierarchy,
                 Window::World,
                 // Window::WorldEntities,
-                Window::Resources,
                 Window::Assets,
                 // Window::Inspector,
             ],
@@ -260,8 +260,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
     ui.vertical(|ui| {
         if ui.button("save color frame").clicked() {
             let current_frame = world
-                .query::<&crate::receiver::KinectFrameBuffers>()
-                .single(world)
+                .resource::<crate::receiver::KinectFrameBuffers>()
                 .current_frame
                 .clone();
             pool.spawn(async move {
@@ -288,8 +287,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
         }
         if ui.button("save depth frame").clicked() {
             let current_frame = world
-                .query::<&crate::receiver::KinectFrameBuffers>()
-                .single(world)
+                .resource::<crate::receiver::KinectFrameBuffers>()
                 .current_frame
                 .clone();
             pool.spawn(async move {
@@ -322,8 +320,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 .pick_file()
             {
                 world
-                    .query::<&mut KinectFrameBuffers>()
-                    .single_mut(world)
+                    .resource_mut::<crate::receiver::KinectFrameBuffers>()
                     .depth_baseline_frame = load_baseline_frame(depth_filename).unwrap();
             }
         }
@@ -363,7 +360,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
             .spacing([40.0, 4.0])
             .striped(true)
             .show(ui, |ui| {
-                let frame_buffers = world.query::<&KinectFrameBuffers>().single(world);
+                let frame_buffers = world.resource::<crate::receiver::KinectFrameBuffers>();
                 let skeleton_frame = &frame_buffers.current_frame.skeleton_frame;
                 let Some(skeleton) = skeleton_frame.skeleton_data.iter()
                     .find(|sk| sk.tracking_state == SkeletonTrackingState::Tracked)
