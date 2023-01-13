@@ -1,5 +1,3 @@
-use std::f32::consts::PI;
-
 use bevy::{math::Affine3A, prelude::*};
 use bevy_aabb_instancing::{ColorOptions, ColorOptionsMap, Cuboid, Cuboids, VertexPullingRenderPlugin, COLOR_MODE_RGB};
 use bevy_prototype_debug_lines::*;
@@ -61,7 +59,6 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
     });
 
     const PATCH_SIZE: usize = 150;
-    const SCENE_RADIUS: f32 = 1500.0;
 
     for y_batch in (0..DEPTH_HEIGHT).step_by(PATCH_SIZE) {
         for x_batch in (0..DEPTH_WIDTH).step_by(PATCH_SIZE) {
@@ -69,26 +66,14 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
             let mut indexes = Vec::with_capacity(PATCH_SIZE * PATCH_SIZE);
             for y in y_batch..(y_batch + PATCH_SIZE).min(DEPTH_HEIGHT) {
                 for x in x_batch..(x_batch + PATCH_SIZE).min(DEPTH_WIDTH) {
+                    let flat_index = x + y * DEPTH_WIDTH;
                     indexes.push(BufferIndex {
                         x: x as u32,
                         y: y as u32,
-                        flat_index: x + y * DEPTH_WIDTH,
+                        flat_index,
                     });
-
-                    let x = x as f32 - SCENE_RADIUS;
-                    let z = y as f32 - SCENE_RADIUS;
-                    let d = (x * x + z * z).sqrt();
-                    let amp = 0.2 * d;
-                    let y = amp * ((0.05 * x).cos() * (0.05 * z).sin());
-                    let c = Vec3::new(x, y, z);
-                    let h = 0.01 * d;
-                    let min = c - Vec3::new(0.5, h, 0.5);
-                    let max = c + Vec3::new(0.5, h, 0.5);
-                    let visible = true;
-                    let depth_jitter = 0;
-                    let scalar_color = u32::from_le_bytes(d.to_le_bytes());
-
-                    instances.push(Cuboid::new(min, max, scalar_color, visible, depth_jitter));
+                    let depth_jitter = (flat_index & 0xffff) as u16;
+                    instances.push(Cuboid::new(Vec3::ZERO, Vec3::ONE, 0, false, depth_jitter));
                 }
             }
             let cuboids = Cuboids::new(instances);
@@ -104,11 +89,11 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
         .spawn(Camera3dBundle::default())
         .insert(OrbitCameraBundle::new(
             OrbitCameraController {
-                mouse_translate_sensitivity: Vec2::splat(100.0),
+                // mouse_translate_sensitivity: Vec2::splat(100.0),
                 ..Default::default()
             },
-            Vec3::new(1.0, 1.0, 1.0) * 3_000.0,
-            Vec3::new(1.0, 0.0, 1.0) * 1_000.0,
+            Vec3::new(1.0, 1.0, 1.0) * 3.0,
+            Vec3::new(1.0, 0.0, 1.0) * 1.0,
         ))
         .insert(MainCamera);
 }
@@ -135,20 +120,21 @@ fn update_cuboid_position_color(
             if depth == 0 {
                 cuboids.instances[i].minimum = Vec3::ZERO;
                 cuboids.instances[i].maximum = Vec3::splat(1.0);
+                cuboids.instances[i].make_invisible();
             } else {
                 let (pixel_pos, point_width) = if depth_transformer.point_cloud_skel {
                     let pixel_pos = depth_transformer
                         .point_transform_matrix
-                        .transform_point3(skeleton_points[flat_index] * 1_000.0 * Vec3::new(1.0, -1.0, 1.0));
+                        .transform_point3(skeleton_points[flat_index] * Vec3::new(1.0, -1.0, 1.0));
                     let point_width = if x > 0 {
-                        // let neighbor_pos = skeleton_points[flat_index - 1] * 1_000.0;
+                        // let neighbor_pos = skeleton_points[flat_index - 1];
                         // pixel_pos.distance(neighbor_pos) / 2.0
                         let pixel_pos = depth_transformer.coordinate_depth_to_xyz(x as usize, y as usize, depth);
                         let neighbor_pos =
                             depth_transformer.coordinate_depth_to_xyz((x + 1) as usize, (y + 1) as usize, depth);
                         pixel_pos.distance(neighbor_pos) / 2.0
                     } else {
-                        10.0
+                        0.010
                     };
                     (pixel_pos, point_width)
                 } else {
@@ -158,16 +144,17 @@ fn update_cuboid_position_color(
                     let point_width = pixel_pos.distance(neighbor_pos) / 2.0;
                     (pixel_pos, point_width)
                 };
-                // let neighbor_pos = skeleton_points[(flat_index + 1) % skeleton_points.len()] * 1_000.0;
+                // let neighbor_pos = skeleton_points[(flat_index + 1) % skeleton_points.len()];
 
                 // let point_cuboid_depth: f32 = 50.0;
                 // let point_cuboid_depth: f32 = point_width;
                 let point_cuboid_depth: f32 =
-                    adjacent_depth_difference(&buffers.derived_frame.depth, x as usize, y as usize, point_width, 250.0);
+                    adjacent_depth_difference(&buffers.derived_frame.depth, x as usize, y as usize, point_width, 0.250);
                 let min = pixel_pos - Vec3::new(point_width, point_width, point_cuboid_depth);
                 let max = pixel_pos + Vec3::new(point_width, point_width, 0.0);
                 cuboids.instances[i].minimum = min;
                 cuboids.instances[i].maximum = max;
+                cuboids.instances[i].make_visible();
             }
         }
         *aabb = cuboids.aabb();
@@ -225,7 +212,7 @@ fn skeleton_lines(
 }
 
 fn axis_references(mut lines: ResMut<DebugLines>, dt: Res<KinectDepthTransformer>) {
-    let scale = 1_000.0;
+    let scale = 1.0;
     lines.line_colored(Vec3::ZERO, Vec3::X * scale, 0.0, Color::RED);
     lines.line_colored(Vec3::ZERO, Vec3::Y * scale, 0.0, Color::GREEN);
     lines.line_colored(Vec3::ZERO, Vec3::Z * scale, 0.0, Color::BLUE);
@@ -274,18 +261,18 @@ fn debug_coordinate_matchup(
     }
 
     for (openvr_point, kinect_image_point) in REFERENCE_POINTS.iter() {
-        let openvr_point = *openvr_point * 1_000.0;
-        // let pixel_pos = skeleton_points[kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH] * 1_000.0;
+        let openvr_point = *openvr_point;
+        // let pixel_pos = skeleton_points[kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH];
         let flat_index = kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH;
         let pixel_pos = if depth_transformer.point_cloud_skel {
             depth_transformer
                 .point_transform_matrix
-                .transform_point3(skeleton_points[flat_index] * 1_000.0 * Vec3::new(1.0, -1.0, 1.0))
+                .transform_point3(skeleton_points[flat_index] * Vec3::new(1.0, -1.0, 1.0))
         } else {
             depth_transformer.coordinate_depth_to_xyz(kinect_image_point.0, kinect_image_point.1, depth[flat_index])
         };
 
         lines.line_colored(openvr_point, pixel_pos, 0.0, Color::YELLOW);
-        draw_debug_axes(&mut lines, &Affine3A::from_translation(openvr_point), 100.0);
+        draw_debug_axes(&mut lines, &Affine3A::from_translation(openvr_point), 0.1);
     }
 }

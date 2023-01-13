@@ -36,10 +36,9 @@ fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, 
         }
         FrameBufferDescriptor::PointCloud => point_cloud_to_pixels(&buffers.point_cloud, image_data),
         FrameBufferDescriptor::SkeletonPointCloud => {
-            vec3_cloud_to_pixels(&buffers.current_frame.skeleton_points, image_data, 1_000.0)
+            vec3_cloud_to_pixels(&buffers.current_frame.skeleton_points, image_data, 1.0)
         }
     }
-
 }
 
 #[derive(Component, Reflect)]

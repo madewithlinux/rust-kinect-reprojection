@@ -47,7 +47,7 @@ impl KinectDepthTransformer {
             width: DEPTH_WIDTH as f32,
             height: DEPTH_HEIGHT as f32,
             sensor_tilt_angle_deg,
-            kinect_position: Vec3::new(-0.077, 2.4273, 1.9451) * 1_000.0,
+            kinect_position: Vec3::new(-0.077, 2.4273, 1.9451),
             kinect_rot_deg: Vec3::new(33.0, 0.0, 0.0),
             kinect_scale: Vec3::new(-1.0, -1.0, -1.0),
             point_transform_matrix,
@@ -91,7 +91,7 @@ impl KinectDepthTransformer {
         let scale_factor = 0.0021;
         let x = (i - self.width / 2.0) * (z + min_distance) * scale_factor;
         let y = (j - self.height / 2.0) * (z + min_distance) * scale_factor;
-        self.point_transform_matrix_inverse.transform_point3(Vec3::new(x, y, z))
+        self.point_transform_matrix_inverse.transform_point3(Vec3::new(x, y, z) / 1_000.0)
     }
 }
 

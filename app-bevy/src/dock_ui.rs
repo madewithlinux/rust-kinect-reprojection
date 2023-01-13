@@ -3,9 +3,7 @@ use std::any::TypeId;
 use bevy::prelude::*;
 use bevy_asset::{HandleId, ReflectAsset};
 use bevy_inspector_egui::bevy_inspector::hierarchy::{hierarchy_ui, SelectedEntities};
-use bevy_inspector_egui::bevy_inspector::{
-    self, ui_for_entities_shared_components, ui_for_entity, ui_for_entity_with_children,
-};
+use bevy_inspector_egui::bevy_inspector::{self, ui_for_entities_shared_components};
 use bevy_inspector_egui::{reflect_inspector, DefaultInspectorConfigPlugin};
 use bevy_reflect::TypeRegistry;
 use bevy_render::camera::{CameraProjection, Viewport};
@@ -13,7 +11,7 @@ use bytemuck::checked::cast_slice;
 use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
-use image::{ImageBuffer, Luma, RgbaImage};
+use image::{ImageBuffer, Luma};
 use kinect1::skeleton::SkeletonTrackingState;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
@@ -376,8 +374,8 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 let right_hand =
                     skeleton.get_skeleton_position_data(kinect1::skeleton::SkeletonPositionIndex::HandRight);
 
-                let left_hand_position = Vec4::from_array(left_hand.position.map(|e| e.0)) * 1_000.0;
-                let right_hand_position = Vec4::from_array(right_hand.position.map(|e| e.0)) * 1_000.0;
+                let left_hand_position = Vec4::from_array(left_hand.position.map(|e| e.0));
+                let right_hand_position = Vec4::from_array(right_hand.position.map(|e| e.0));
                 let hand_dist = (left_hand_position - right_hand_position).length();
 
                 ui.label("left hand");

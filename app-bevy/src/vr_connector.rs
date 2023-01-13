@@ -6,9 +6,6 @@ use crate::util::draw_debug_axes;
 
 pub struct OpenVrContextSystem(openvr::Context, openvr::System);
 
-/// openvr is scaled in meters, but we are using millimeters
-pub const OPENVR_SCALE_FACTOR: f32 = 1_000.0;
-
 #[derive(Resource, Debug, Default, Clone, Reflect)]
 #[reflect(Debug, Resource)]
 pub struct TrackedDevicePose {
@@ -26,9 +23,9 @@ impl From<&openvr::TrackedDevicePose> for TrackedDevicePose {
             velocity: Vec3::from_array(*pose.velocity()),
             angular_velocity: Vec3::from_array(*pose.angular_velocity()),
             position: Vec3::new(
-                device_to_absolute_tracking[0][3] * OPENVR_SCALE_FACTOR,
-                device_to_absolute_tracking[1][3] * OPENVR_SCALE_FACTOR,
-                device_to_absolute_tracking[2][3] * OPENVR_SCALE_FACTOR,
+                device_to_absolute_tracking[0][3],
+                device_to_absolute_tracking[1][3],
+                device_to_absolute_tracking[2][3],
             ),
             transform: Affine3A::from_mat4(
                 Mat4::from_cols_array_2d(&[
@@ -37,8 +34,7 @@ impl From<&openvr::TrackedDevicePose> for TrackedDevicePose {
                     device_to_absolute_tracking[2],
                     [0.0, 0.0, 0.0, 0.0],
                 ])
-                .transpose()
-                    * OPENVR_SCALE_FACTOR,
+                .transpose(),
             ),
         }
     }
@@ -97,18 +93,9 @@ fn update_pose_data(mut pose_data: ResMut<OpenVrPoseData>, open_vr_context_syste
 }
 
 fn debug_pose_data(pose_data: Res<OpenVrPoseData>, mut lines: ResMut<DebugLines>) {
-    draw_debug_axes(&mut lines, &pose_data.hmd.transform, 200.0);
-    draw_debug_axes(&mut lines, &pose_data.left_controller.transform, 200.0);
-    draw_debug_axes(&mut lines, &pose_data.right_controller.transform, 200.0);
-
-    // // let REFERENCE_POINTS = vec![
-    // //     Vec3::new(1.1872808, 1.5832841, -0.95948) * 1_000.0,
-    // //     Vec3::new(1.2902215, -0.021568049, -0.59659046) * 1_000.0,
-    // //     Vec3::new(-1.4719752, 0.45078325, -0.96842957) * 1_000.0,
-    // // ];
-    // for (p, _) in REFERENCE_POINTS.iter() {
-    //     draw_debug_axes(&mut lines, &Affine3A::from_translation(*p * 1_000.0), 100.0);
-    // }
+    draw_debug_axes(&mut lines, &pose_data.hmd.transform, 0.2);
+    draw_debug_axes(&mut lines, &pose_data.left_controller.transform, 0.2);
+    draw_debug_axes(&mut lines, &pose_data.right_controller.transform, 0.2);
 }
 
 pub struct VrConnectorPlugin;
