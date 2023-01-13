@@ -15,6 +15,7 @@ use smooth_bevy_cameras::{
 use crate::{
     dock_ui::MainCamera,
     receiver::{KinectDepthTransformer, KinectFrameBuffers, KinectPostProcessorConfig},
+    util::draw_debug_axes,
     DEPTH_HEIGHT, DEPTH_WIDTH,
 };
 
@@ -34,6 +35,7 @@ impl Plugin for PointCloudPlugin {
             .add_system(update_cuboid_position_color)
             .add_system(skeleton_lines)
             .add_system(axis_references)
+            .add_system(debug_coordinate_matchup)
             // .register_type::<BufferIndexes>()
             ;
     }
@@ -250,4 +252,40 @@ fn axis_references(mut lines: ResMut<DebugLines>, dt: Res<KinectDepthTransformer
         0.0,
         Color::BLUE,
     );
+}
+
+const REFERENCE_POINTS: [(Vec3, (usize, usize)); 3] = [
+    (Vec3::new(1.2902215, -0.021568049, -0.59659046), (136, 346)),
+    (Vec3::new(-1.4719752, 0.45078325, -0.96842957), (570, 278)),
+    (Vec3::new(1.1872808, 1.5832841, -0.95948), (134, 89)),
+];
+
+fn debug_coordinate_matchup(
+    data_source_query: Query<(&KinectPostProcessorConfig, &KinectFrameBuffers)>,
+    depth_transformer: Res<KinectDepthTransformer>,
+    mut lines: ResMut<DebugLines>,
+) {
+    let (config, buffers) = data_source_query.single();
+
+    let depth = &buffers.current_frame.depth;
+    let skeleton_points = &buffers.current_frame.skeleton_points;
+    if skeleton_points.len() < 1 {
+        return;
+    }
+
+    for (openvr_point, kinect_image_point) in REFERENCE_POINTS.iter() {
+        let openvr_point = *openvr_point * 1_000.0;
+        // let pixel_pos = skeleton_points[kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH] * 1_000.0;
+        let flat_index = kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH;
+        let pixel_pos = if depth_transformer.point_cloud_skel {
+            depth_transformer
+                .point_transform_matrix
+                .transform_point3(skeleton_points[flat_index] * 1_000.0 * Vec3::new(1.0, -1.0, 1.0))
+        } else {
+            depth_transformer.coordinate_depth_to_xyz(kinect_image_point.0, kinect_image_point.1, depth[flat_index])
+        };
+
+        lines.line_colored(openvr_point, pixel_pos, 0.0, Color::YELLOW);
+        draw_debug_axes(&mut lines, &Affine3A::from_translation(openvr_point), 100.0);
+    }
 }

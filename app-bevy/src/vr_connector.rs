@@ -100,6 +100,15 @@ fn debug_pose_data(pose_data: Res<OpenVrPoseData>, mut lines: ResMut<DebugLines>
     draw_debug_axes(&mut lines, &pose_data.hmd.transform, 200.0);
     draw_debug_axes(&mut lines, &pose_data.left_controller.transform, 200.0);
     draw_debug_axes(&mut lines, &pose_data.right_controller.transform, 200.0);
+
+    // // let REFERENCE_POINTS = vec![
+    // //     Vec3::new(1.1872808, 1.5832841, -0.95948) * 1_000.0,
+    // //     Vec3::new(1.2902215, -0.021568049, -0.59659046) * 1_000.0,
+    // //     Vec3::new(-1.4719752, 0.45078325, -0.96842957) * 1_000.0,
+    // // ];
+    // for (p, _) in REFERENCE_POINTS.iter() {
+    //     draw_debug_axes(&mut lines, &Affine3A::from_translation(*p * 1_000.0), 100.0);
+    // }
 }
 
 pub struct VrConnectorPlugin;

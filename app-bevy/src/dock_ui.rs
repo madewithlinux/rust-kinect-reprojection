@@ -9,10 +9,11 @@ use bevy_inspector_egui::bevy_inspector::{
 use bevy_inspector_egui::{reflect_inspector, DefaultInspectorConfigPlugin};
 use bevy_reflect::TypeRegistry;
 use bevy_render::camera::{CameraProjection, Viewport};
+use bytemuck::checked::cast_slice;
 use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
-use image::{ImageBuffer, Luma};
+use image::{ImageBuffer, Luma, RgbaImage};
 use kinect1::skeleton::SkeletonTrackingState;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
@@ -259,6 +260,34 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
     let pool = bevy::tasks::AsyncComputeTaskPool::get();
 
     ui.vertical(|ui| {
+        if ui.button("save color frame").clicked() {
+            let current_frame = world
+                .query::<&crate::receiver::KinectFrameBuffers>()
+                .single(world)
+                .current_frame
+                .clone();
+            pool.spawn(async move {
+                info!("saving color frame");
+                let Some(color_filename) = rfd::FileDialog::new()
+                    .add_filter("png", &["png", "PNG"])
+                    .set_title("save color frame")
+                    .set_file_name("kinect_color_data.png")
+                    .save_file() else {
+                        info!("file chooser cancelled");
+                        return
+                    };
+                let color_frame: ImageBuffer<image::Rgba<u8>, _> = ImageBuffer::from_raw(
+                    current_frame.width as u32,
+                    current_frame.height as u32,
+                    cast_slice(&current_frame.rgba),
+                    // current_frame.rgba,
+                )
+                .unwrap();
+                color_frame.save(&color_filename).unwrap();
+                info!("saved {:?}", &color_filename);
+            })
+            .detach();
+        }
         if ui.button("save depth frame").clicked() {
             let current_frame = world
                 .query::<&crate::receiver::KinectFrameBuffers>()

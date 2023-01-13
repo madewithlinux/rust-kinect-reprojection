@@ -3209,6 +3209,7 @@ dependencies = [
  "bytemuck",
  "crossbeam",
  "enumset",
+ "glam",
  "image 0.24.5",
  "itertools",
  "num",
