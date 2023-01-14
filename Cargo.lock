@@ -3652,11 +3652,13 @@ dependencies = [
  "image 0.24.5",
  "itertools",
  "kinect1",
+ "lazy_static",
  "openvr",
  "ordered-float",
  "rfd",
  "smooth-bevy-cameras",
  "thiserror",
+ "windows 0.43.0",
 ]
 
 [[package]]

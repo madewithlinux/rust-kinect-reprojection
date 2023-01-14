@@ -4,7 +4,11 @@ use bevy::{math::Affine3A, prelude::*};
 use bevy_prototype_debug_lines::DebugLines;
 use openvr::TrackingResult;
 
-use crate::util::draw_debug_axes;
+use crate::{
+    delay_buffer::{query_performance_counter_ms, DelayBuffer},
+    util::draw_debug_axes,
+    FIXED_DELAY_MS,
+};
 
 pub struct OpenVrContextSystem(openvr::Context, openvr::System);
 
@@ -57,7 +61,13 @@ fn setup_openvr_connector(world: &mut World) {
     world.insert_resource(OpenVrPoseData::default());
 }
 
-fn update_pose_data(mut pose_data: ResMut<OpenVrPoseData>, open_vr_context_system: NonSend<OpenVrContextSystem>) {
+fn update_pose_data(
+    mut delayed_pose_data: ResMut<OpenVrPoseData>,
+    open_vr_context_system: NonSend<OpenVrContextSystem>,
+    mut pose_data_buffer: Local<DelayBuffer<OpenVrPoseData>>,
+) {
+    let timestamp = query_performance_counter_ms();
+
     let system: &openvr::System = &open_vr_context_system.1;
 
     let left_controller_index = system
@@ -68,6 +78,7 @@ fn update_pose_data(mut pose_data: ResMut<OpenVrPoseData>, open_vr_context_syste
         .unwrap_or((openvr::MAX_TRACKED_DEVICE_COUNT + 1) as u32) as usize;
 
     let poses = system.device_to_absolute_tracking_pose(openvr::TrackingUniverseOrigin::Standing, 0.0);
+    let mut pose_data: OpenVrPoseData = pose_data_buffer.back().cloned().unwrap_or_default();
     for (i, pose) in poses.iter().enumerate() {
         if !pose.pose_is_valid() {
             continue;
@@ -92,6 +103,11 @@ fn update_pose_data(mut pose_data: ResMut<OpenVrPoseData>, open_vr_context_syste
             _ => (), // skip other tracking data
         }
     }
+    pose_data_buffer.push_for_timestamp(timestamp, pose_data);
+    if let Some(pd) = pose_data_buffer.pop_for_delay(FIXED_DELAY_MS) {
+        *delayed_pose_data = pd;
+    }
+    // *delayed_pose_data = pose_data_buffer.pop_for_delay(FIXED_DELAY_MS).unwrap_or_default();
 }
 
 fn debug_pose_data(pose_data: Res<OpenVrPoseData>, mut lines: ResMut<DebugLines>) {

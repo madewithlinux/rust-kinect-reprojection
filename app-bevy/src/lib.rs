@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use dock_ui::MainCamera;
 
+pub mod delay_buffer;
 pub mod dock_ui;
 pub mod frame_display;
 pub mod frame_visualization_util;
@@ -14,6 +15,8 @@ pub const COLOR_HEIGHT: usize = 480;
 // TODO: use the smaller depth size that isn't interpolated?
 pub const DEPTH_WIDTH: usize = 640;
 pub const DEPTH_HEIGHT: usize = 480;
+
+pub const FIXED_DELAY_MS: i64 = 500;
 
 pub fn app_main() {
     App::new()

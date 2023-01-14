@@ -1,4 +1,5 @@
 use std::any::TypeId;
+use std::time::SystemTime;
 
 use bevy::prelude::*;
 use bevy_asset::{HandleId, ReflectAsset};
@@ -15,7 +16,7 @@ use image::{ImageBuffer, Luma};
 use kinect1::skeleton::SkeletonTrackingState;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
-use crate::receiver::{load_baseline_frame, KinectDepthTransformer, KinectFrameBuffers};
+use crate::receiver::load_baseline_frame;
 use crate::vr_connector::OpenVrPoseData;
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH};
 
@@ -23,7 +24,7 @@ pub struct AppUiDockPlugin;
 impl Plugin for AppUiDockPlugin {
     fn build(&self, app: &mut App) {
         app //
-            .add_plugin(bevy_framepace::FramepacePlugin) // reduces input lag
+            // .add_plugin(bevy_framepace::FramepacePlugin) // reduces input lag
             .add_plugin(DefaultInspectorConfigPlugin)
             .add_plugin(bevy_egui::EguiPlugin)
             .insert_resource(UiState::new())
@@ -324,6 +325,51 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                     .depth_baseline_frame = load_baseline_frame(depth_filename).unwrap();
             }
         }
+
+        ui.heading("timing");
+        egui::Grid::new("timing")
+            .num_columns(2)
+            .spacing([40.0, 4.0])
+            .striped(true)
+            .show(ui, |ui| {
+                let buffers = &world.resource::<crate::receiver::KinectFrameBuffers>();
+                if buffers.frame_history.len() < 2 {
+                    return;
+                }
+                let depth_timestamp = buffers.current_frame.depth_frame_info.timestamp;
+
+                let system_timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+
+                ui.label("depth_timestamp");
+                reflect_inspector::ui_for_value_readonly(&depth_timestamp, ui, type_registry);
+                ui.end_row();
+
+                ui.label("depth frame diff");
+                reflect_inspector::ui_for_value_readonly(
+                    &(buffers.frame_history[0].depth_frame_info.timestamp
+                        - buffers.frame_history[1].depth_frame_info.timestamp),
+                    ui,
+                    type_registry,
+                );
+                ui.end_row();
+
+                ui.label("system_timestamp");
+                // let millis = system_timestamp.as_millis() as i64;
+                let millis = unsafe {
+                    let mut counter = 0;
+                    windows::Win32::System::Performance::QueryPerformanceCounter(&mut counter)
+                        .ok()
+                        .unwrap();
+                    let mut freq = 0;
+                    windows::Win32::System::Performance::QueryPerformanceFrequency(&mut freq);
+                    counter / (freq / 1_000)
+                };
+                reflect_inspector::ui_for_value_readonly(&millis, ui, type_registry);
+                ui.end_row();
+                ui.label("system_timestamp diff");
+                reflect_inspector::ui_for_value_readonly(&(millis - depth_timestamp), ui, type_registry);
+                ui.end_row();
+            });
 
         ui.heading("VR");
         egui::Grid::new("vr")

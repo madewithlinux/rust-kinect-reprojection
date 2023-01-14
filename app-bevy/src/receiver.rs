@@ -9,10 +9,10 @@ use kinect1::{
     worker_v2::{start_frame_thread2, FrameMessage, FrameMessageReceiver},
 };
 
-use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
+use crate::{delay_buffer::DelayBuffer, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH, FIXED_DELAY_MS};
 
-#[derive(Debug)]
-pub struct KinectReceiver(pub FrameMessageReceiver);
+// #[derive(Debug)]
+pub struct KinectReceiver(pub FrameMessageReceiver, pub DelayBuffer<FrameMessage>);
 
 #[derive(Resource, Debug, Default, Clone, Reflect)]
 #[reflect(Debug, Resource)]
@@ -167,12 +167,22 @@ impl Default for KinectFrameBuffers {
 }
 
 fn receive_kinect_current_frame(
-    receiver: NonSend<KinectReceiver>,
+    mut receiver: NonSendMut<KinectReceiver>,
     config: Res<KinectPostProcessorConfig>,
     mut buffers: ResMut<KinectFrameBuffers>,
     depth_transformer: Res<KinectDepthTransformer>,
 ) {
-    if let Ok(received_frame) = receiver.0.try_recv() {
+    while let Ok(received_frame) = receiver.0.try_recv() {
+        receiver.1.push_for_timestamp(
+            received_frame
+                .depth_frame_info
+                .timestamp
+                .max(received_frame.color_frame_info.timestamp),
+            received_frame,
+        );
+    }
+    // if let Ok(received_frame) = receiver.0.try_recv() {
+    if let Some(received_frame) = receiver.1.pop_for_delay(FIXED_DELAY_MS) {
         process_received_frame(received_frame, &config, &mut buffers, &depth_transformer);
     }
 }
@@ -249,7 +259,7 @@ pub fn try_load_baseline_frame(path: impl AsRef<std::path::Path>) -> Vec<u16> {
 
 fn setup_kinect_receiver(world: &mut World) {
     let receiver = start_frame_thread2();
-    world.insert_non_send_resource(KinectReceiver(receiver));
+    world.insert_non_send_resource(KinectReceiver(receiver, Default::default()));
     world.insert_resource(KinectDepthTransformer::new());
     world.insert_resource(KinectPostProcessorConfig::default());
     world.insert_resource(KinectFrameBuffers {
