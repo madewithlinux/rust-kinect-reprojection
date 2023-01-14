@@ -88,12 +88,9 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
     commands
         .spawn(Camera3dBundle::default())
         .insert(OrbitCameraBundle::new(
-            OrbitCameraController {
-                // mouse_translate_sensitivity: Vec2::splat(100.0),
-                ..Default::default()
-            },
-            Vec3::new(1.0, 1.0, 1.0) * 3.0,
-            Vec3::new(1.0, 0.0, 1.0) * 1.0,
+            OrbitCameraController::default(),
+            Vec3::new(0.5, 3.6, 2.6),
+            Vec3::new(0.0, 0.0, -0.8),
         ))
         .insert(MainCamera);
 }

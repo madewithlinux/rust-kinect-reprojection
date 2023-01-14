@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::{math::Affine3A, prelude::*};
 use bevy_prototype_debug_lines::DebugLines;
 use openvr::TrackingResult;
@@ -98,12 +100,105 @@ fn debug_pose_data(pose_data: Res<OpenVrPoseData>, mut lines: ResMut<DebugLines>
     draw_debug_axes(&mut lines, &pose_data.right_controller.transform, 0.2);
 }
 
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Debug, Component)]
+pub enum VrPoseMarker {
+    #[default]
+    Hmd,
+    LeftController,
+    RightController,
+}
+
+fn spawn_vr_pose_markers(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // lights
+    for transform in [
+        Transform::from_xyz(0.0, 2.0, 0.0),
+        Transform::from_xyz(2.0, 2.0, 2.0),
+        Transform::from_xyz(-2.0, 2.0, 2.0),
+    ] {
+        commands.spawn(PointLightBundle {
+            point_light: PointLight {
+                intensity: 500.0,
+                shadows_enabled: false,
+                ..default()
+            },
+            transform,
+            ..default()
+        });
+    }
+
+    commands.spawn((
+        Name::new("hmd"),
+        VrPoseMarker::Hmd,
+        PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Box::new(0.180, 0.12, 0.30))),
+            material: materials.add(Color::rgb(0.0, 1.0, 0.0).into()),
+            ..default()
+        },
+    ));
+
+    let capsule = meshes.add(Mesh::from(shape::Capsule {
+        radius: 0.030,
+        depth: 0.150,
+        ..Default::default()
+    }));
+    commands
+        .spawn((
+            Name::new("left controller"),
+            TransformBundle::default(),
+            VisibilityBundle::default(),
+            VrPoseMarker::LeftController,
+        ))
+        .with_children(|parent| {
+            parent.spawn((PbrBundle {
+                mesh: capsule.clone(),
+                material: materials.add(Color::rgb(1.0, 0.0, 0.0).into()),
+                transform: Transform::from_rotation(Quat::from_axis_angle(Vec3::X, PI / 2.0))
+                    .with_translation(Vec3::new(0.0, 0.0, 0.15 / 2.0)),
+                ..default()
+            },));
+        });
+    commands
+        .spawn((
+            Name::new("right controller"),
+            TransformBundle::default(),
+            VisibilityBundle::default(),
+            VrPoseMarker::RightController,
+        ))
+        .with_children(|parent| {
+            parent.spawn((PbrBundle {
+                mesh: capsule,
+                material: materials.add(Color::rgb(0.0, 0.0, 1.0).into()),
+                transform: Transform::from_rotation(Quat::from_axis_angle(Vec3::X, PI / 2.0))
+                    .with_translation(Vec3::new(0.0, 0.0, 0.15 / 2.0)),
+                ..default()
+            },));
+        });
+}
+
+fn update_vr_pose_markers(mut query: Query<(&VrPoseMarker, &mut Transform)>, vr_pose_data: Res<OpenVrPoseData>) {
+    for (marker, mut transform) in query.iter_mut() {
+        *transform = match marker {
+            VrPoseMarker::Hmd => Transform::from_matrix(vr_pose_data.hmd.transform.into()),
+            VrPoseMarker::LeftController => Transform::from_matrix(vr_pose_data.left_controller.transform.into()),
+            VrPoseMarker::RightController => Transform::from_matrix(vr_pose_data.right_controller.transform.into()),
+        };
+    }
+}
+
 pub struct VrConnectorPlugin;
 impl Plugin for VrConnectorPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_openvr_connector)
             .add_system(update_pose_data)
             .add_system(debug_pose_data)
-            .register_type::<OpenVrPoseData>();
+            .add_startup_system(spawn_vr_pose_markers)
+            .add_system(update_vr_pose_markers)
+            .register_type::<OpenVrPoseData>()
+            .register_type::<VrPoseMarker>();
     }
 }
