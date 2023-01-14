@@ -74,13 +74,8 @@ impl KinectDepthTransformer {
         {
             return None;
         }
-        let depth = depth_frame[pos.pixel_index];
-        if depth == 0 {
-            return None;
-        }
-        Some(self.index_depth_to_world(pos.pixel_index, depth))
+        Some(self.skeleton_point_to_world(Vec3::new(pos.position[0].0, pos.position[1].0, pos.position[2].0)))
     }
-
     pub fn skeleton_point_to_world(&self, skeleton_point: Vec3) -> Vec3 {
         self.point_transform_matrix.transform_point3(skeleton_point)
     }

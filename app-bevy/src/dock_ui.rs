@@ -15,7 +15,7 @@ use image::{ImageBuffer, Luma};
 use kinect1::skeleton::SkeletonTrackingState;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
-use crate::receiver::{load_baseline_frame, KinectFrameBuffers, KinectDepthTransformer};
+use crate::receiver::{load_baseline_frame, KinectDepthTransformer, KinectFrameBuffers};
 use crate::vr_connector::OpenVrPoseData;
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH};
 
@@ -395,6 +395,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
             .striped(true)
             .show(ui, |ui| {
                 let buffers = world.resource::<crate::receiver::KinectFrameBuffers>();
+                let skeleton_frame = &buffers.current_frame.skeleton_frame;
                 let skeleton_points = &buffers.current_frame.skeleton_points;
                 if skeleton_points.len() < 1 {
                     return;
@@ -411,19 +412,28 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                     reflect_inspector::ui_for_value_readonly(&openvr_point, ui, type_registry);
                     reflect_inspector::ui_for_value_readonly(&skel_point, ui, type_registry);
                     ui.end_row();
-                };
+                }
 
                 if ui.button("print them").clicked() {
-                    let to_print = crate::point_cloud::REFERENCE_POINTS.map(
-                        |(openvr_point, kinect_image_point)| {
-                            let flat_index = kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH;
-                            let skel_point = skeleton_points[flat_index];
-                            (openvr_point, kinect_image_point, skel_point)
-                        }
-                    );
+                    let to_print = crate::point_cloud::REFERENCE_POINTS.map(|(openvr_point, kinect_image_point)| {
+                        let flat_index = kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH;
+                        let skel_point = skeleton_points[flat_index];
+                        (openvr_point, kinect_image_point, skel_point)
+                    });
                     println!("VR-kinect matchup: {:?}", to_print);
                 };
+                ui.end_row();
 
+                if let Some(right_hand) = skeleton_frame.right_hand() {
+                    let vr_pose_data = world.resource::<OpenVrPoseData>();
+                    if ui.button("print right hand coordinates").clicked() {
+                        println!(
+                            "vr_right_controller={:?}\t sk_right_hand={:?}",
+                            vr_pose_data.right_controller.position, right_hand.position,
+                        );
+                    };
+                    ui.end_row();
+                }
             });
     });
 }

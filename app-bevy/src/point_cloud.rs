@@ -4,7 +4,7 @@ use bevy_prototype_debug_lines::*;
 use bevy_render::primitives::Aabb;
 
 use itertools::{iproduct, Itertools};
-use kinect1::skeleton::{SkeletonPositionTrackingState, SkeletonTrackingState};
+use kinect1::skeleton::{SkeletonPositionIndex, SkeletonPositionTrackingState, SkeletonTrackingState};
 use smooth_bevy_cameras::{
     controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin},
     LookTransformPlugin,
@@ -189,6 +189,11 @@ fn skeleton_lines(
                 SkeletonPositionTrackingState::Inferred => Color::YELLOW,
                 SkeletonPositionTrackingState::Tracked => Color::WHITE,
             });
+            let [start_color, end_color] = match bone[1].index {
+                SkeletonPositionIndex::HandLeft => [Color::RED, Color::RED],
+                SkeletonPositionIndex::HandRight => [Color::BLUE, Color::BLUE],
+                _ => [start_color, end_color],
+            };
             lines.line_gradient(start_xyz, end_xyz, 0.0, start_color, end_color);
         }
     }
@@ -227,6 +232,28 @@ pub const REFERENCE_POINTS: [(Vec3, (usize, usize)); 3] = [
     (Vec3::new(-1.4719752, 0.45078325, -0.96842957), (570, 278)),
     (Vec3::new(1.1872808, 1.5832841, -0.95948), (134, 89)),
 ];
+pub const MORE_REFERENCE_POINTS: [(Vec3, Vec3); 5] = [
+    (
+        Vec3::new(-0.44902867, 1.2476542, 0.010715961),
+        Vec3::new(0.6713257, 0.042388733, 2.3023503),
+    ),
+    (
+        Vec3::new(-0.66511905, 1.476749, 0.38921714),
+        Vec3::new(0.8464379, 0.036796886, 1.826863),
+    ),
+    (
+        Vec3::new(0.39814186, 1.4179764, 0.61133754),
+        Vec3::new(-0.29460278, -0.062339563, 1.6987133),
+    ),
+    (
+        Vec3::new(0.61787796, 1.363985, -0.26557398),
+        Vec3::new(-0.5433431, 0.36454648, 2.476277),
+    ),
+    (
+        Vec3::new(-0.4848734, 0.6623882, -0.33309472),
+        Vec3::new(0.691764, -0.29973462, 2.8916762),
+    ),
+];
 
 fn debug_coordinate_matchup(
     buffers: Res<KinectFrameBuffers>,
@@ -239,8 +266,8 @@ fn debug_coordinate_matchup(
         return;
     }
 
-    for (openvr_point, kinect_image_point) in REFERENCE_POINTS.iter() {
-        let openvr_point = *openvr_point;
+    for (vr_point, kinect_image_point) in REFERENCE_POINTS.iter() {
+        let vr_point = *vr_point;
         let flat_index = depth_transformer.ij_to_flat_index(kinect_image_point.0, kinect_image_point.1);
         let pixel_pos = if depth_transformer.point_cloud_skel {
             depth_transformer.skeleton_point_to_world(skeleton_points[flat_index])
@@ -248,7 +275,13 @@ fn debug_coordinate_matchup(
             depth_transformer.index_depth_to_world(flat_index, depth[flat_index])
         };
 
-        lines.line_colored(openvr_point, pixel_pos, 0.0, Color::YELLOW);
-        draw_debug_axes(&mut lines, &Affine3A::from_translation(openvr_point), 0.1);
+        lines.line_colored(vr_point, pixel_pos, 0.0, Color::YELLOW);
+        draw_debug_axes(&mut lines, &Affine3A::from_translation(vr_point), 0.1);
+    }
+
+    for &(vr_point, sk_point) in MORE_REFERENCE_POINTS.iter() {
+        let pixel_pos = depth_transformer.skeleton_point_to_world(sk_point);
+        lines.line_colored(vr_point, pixel_pos, 0.0, Color::YELLOW);
+        draw_debug_axes(&mut lines, &Affine3A::from_translation(vr_point), 0.1);
     }
 }

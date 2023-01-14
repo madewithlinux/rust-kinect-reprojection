@@ -1,4 +1,5 @@
 use enumset::{EnumSet, EnumSetType};
+use glam::Vec3;
 use itertools::Itertools;
 use kinect1_sys::{NUI_SKELETON_COUNT, _NUI_SKELETON_POSITION_INDEX_NUI_SKELETON_POSITION_COUNT};
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -87,7 +88,6 @@ pub enum SkeletonQualityFlags {
 pub type SkVector4 = [OrderedFloat<f32>; 4];
 
 pub(crate) fn vector4_to_sk_vector4(v: &kinect1_sys::Vector4) -> SkVector4 {
-    // TODO: I suspect this is incorrect, and w is actually the last component
     [
         OrderedFloat(v.x),
         OrderedFloat(v.y),
@@ -229,5 +229,21 @@ impl From<&kinect1_sys::NUI_SKELETON_FRAME> for SkeletonFrame {
                 .filter(|sk| sk.tracking_state != SkeletonTrackingState::NotTracked)
                 .collect_vec(),
         }
+    }
+}
+
+impl SkeletonFrame {
+    pub fn first_skeleton(&self) -> Option<SkeletonData> {
+        self.skeleton_data.get(0).map(|sk| *sk)
+    }
+    pub fn left_hand(&self) -> Option<SkeletonPositionData> {
+        self.skeleton_data
+            .get(0)
+            .map(|sk| sk.get_skeleton_position_data(SkeletonPositionIndex::HandLeft))
+    }
+    pub fn right_hand(&self) -> Option<SkeletonPositionData> {
+        self.skeleton_data
+            .get(0)
+            .map(|sk| sk.get_skeleton_position_data(SkeletonPositionIndex::HandRight))
     }
 }
