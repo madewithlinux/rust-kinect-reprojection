@@ -71,15 +71,6 @@ fn setup(mut commands: Commands, mut color_options_map: ResMut<ColorOptionsMap>)
                 .insert(BufferIndexes { indexes });
         }
     }
-
-    // commands
-    //     .spawn(Camera3dBundle::default())
-    //     .insert(OrbitCameraBundle::new(
-    //         OrbitCameraController::default(),
-    //         Vec3::new(0.5, 3.6, 2.6),
-    //         Vec3::new(0.0, 0.0, -0.8),
-    //     ))
-    //     .insert(MainCamera);
 }
 
 const POINT_WIDTH_FACTOR: f32 = 0.0014800;
@@ -89,17 +80,17 @@ fn update_cuboid_position_color(
     mut cuboids_query: Query<(&BufferIndexes, &mut Cuboids, &mut Aabb)>,
     depth_transformer: Res<KinectDepthTransformer>,
 ) {
-    let skeleton_points = &buffers.current_frame.skeleton_points;
+    let skeleton_points = &buffers.skeleton_points;
 
     for (buffer_indexes, mut cuboids, mut aabb) in cuboids_query.iter_mut() {
         assert_eq!(buffer_indexes.indexes.len(), cuboids.instances.len());
         for (i, &BufferIndex { x, y, flat_index }) in buffer_indexes.indexes.iter().enumerate() {
             // set color
-            let [r, g, b, _a] = buffers.current_frame.rgba[flat_index];
+            let [r, g, b, _a] = buffers.rgba[flat_index];
             cuboids.instances[i].color = u32::from_le_bytes([r, g, b, 255]);
 
             // set position
-            let depth = buffers.derived_frame.depth[flat_index];
+            let depth = buffers.depth[flat_index];
             if depth == 0 {
                 cuboids.instances[i].minimum = Vec3::ZERO;
                 cuboids.instances[i].maximum = Vec3::splat(1.0);
@@ -118,7 +109,7 @@ fn update_cuboid_position_color(
 
                 // let point_cuboid_depth: f32 = point_width;
                 let point_cuboid_depth: f32 =
-                    adjacent_depth_difference(&buffers.derived_frame.depth, x as usize, y as usize, point_width, 0.1);
+                    adjacent_depth_difference(&buffers.depth, x as usize, y as usize, point_width, 0.1);
                 let min = pixel_pos - Vec3::new(point_width, point_width, point_cuboid_depth);
                 let max = pixel_pos + Vec3::new(point_width, point_width, 0.0);
                 cuboids.instances[i].minimum = min;

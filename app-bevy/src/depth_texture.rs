@@ -1,7 +1,9 @@
 use bevy::prelude::*;
+use bevy_reflect::TypeUuid;
 use bevy_render::{
     mesh::{Indices, VertexAttributeValues},
-    render_resource::PrimitiveTopology,
+    primitives::Aabb,
+    render_resource::{AsBindGroup, PrimitiveTopology, ShaderRef},
 };
 use bytemuck::checked::{cast_slice, cast_slice_mut};
 use itertools::Itertools;
@@ -15,6 +17,7 @@ pub struct DepthTexturePlugin;
 impl Plugin for DepthTexturePlugin {
     fn build(&self, app: &mut App) {
         app //
+            // .add_plugin(MaterialPlugin::<CustomMaterial>::default())
             .add_startup_system(spawn_depth_texture)
             .add_system(update_depth_texture);
     }
@@ -27,6 +30,7 @@ fn spawn_depth_texture(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    // mut materials: ResMut<Assets<CustomMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let image_handle = images.add(Image::new_fill(
@@ -48,19 +52,24 @@ fn spawn_depth_texture(
         // alpha_mode: AlphaMode::Blend,
         alpha_mode: AlphaMode::Mask(0.5),
         unlit: true,
+        double_sided: true,
         ..default()
     });
+    // let material_handle = materials.add(CustomMaterial {
+    //     texture: image_handle.clone(),
+    // });
 
     commands.spawn((
         Name::new("depth_texture"),
         DepthTextureMarker,
-        // FrameBufferImageHandle(FrameBufferDescriptor::CurrentColor, image_handle.clone()),
         PbrBundle {
+        // MaterialMeshBundle {
             mesh: quad_handle,
             material: material_handle,
             transform: Transform::from_xyz(0.0, 0.0, 0.0),
             ..Default::default()
         },
+        Aabb::default(),
     ));
 }
 
@@ -95,35 +104,41 @@ fn make_subdivided_quad(width: usize, height: usize) -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
     mesh.set_indices(Some(Indices::U32(indices)));
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    // mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh
 }
 
 fn update_depth_texture(
     buffers: Res<KinectFrameBuffers>,
-    depth_texture: Query<(&DepthTextureMarker, &Handle<Mesh>, &Handle<StandardMaterial>)>,
+    mut depth_texture: Query<(&DepthTextureMarker, &Handle<Mesh>, &Handle<StandardMaterial>, &mut Aabb)>,
+    // mut depth_texture: Query<(&DepthTextureMarker, &Handle<Mesh>, &Handle<CustomMaterial>, &mut Aabb)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    // mut materials: ResMut<Assets<CustomMaterial>>,
     mut images: ResMut<Assets<Image>>,
     depth_transformer: Res<KinectDepthTransformer>,
 ) {
-    if buffers.derived_frame.depth.len() == 0 {
-        info!("depth frame empty");
-        return;
-    }
-    let rgba = &buffers.current_frame.rgba;
-    let skeleton_points = &buffers.current_frame.skeleton_points;
-    let depths = &buffers.current_frame.depth;
-    let player_indexes = &buffers.current_frame.player_index;
+    // if buffers.derived_frame.depth.len() == 0 {
+    //     info!("depth frame empty");
+    //     return;
+    // }
+    let rgba = &buffers.rgba;
+    let skeleton_points = &buffers.skeleton_points;
+    let depths = &buffers.depth;
+    let player_indexes = &buffers.player_index;
     // TODO: refactor and put this somewhere else
-    let depths = depths
-        .iter()
-        .zip(player_indexes.iter())
-        .map(|(depth, player_index)| if *player_index > 0 { *depth } else { 0 })
-        .collect_vec();
+    let depths = if player_indexes.iter().any(|player_index| *player_index > 0) {
+        depths
+            .iter()
+            .zip(player_indexes.iter())
+            .map(|(depth, player_index)| if *player_index > 0 { *depth } else { 0 })
+            .collect_vec()
+    } else {
+        depths.clone()
+    };
 
-    let (_marker, mesh_handle, material_handle) = depth_texture.single();
+    let (_marker, mesh_handle, material_handle, mut aabb) = depth_texture.single_mut();
     let Some(material) = materials.get_mut(&material_handle) else {
         info!("material not found");
         return;
@@ -132,6 +147,7 @@ fn update_depth_texture(
         info!("image handle not found");
         return;
     };
+    // let image_handle = &material.texture;
     if let Some(image) = images.get_mut(image_handle) {
         // get_buffer(&FrameBufferDescriptor::CurrentColor, &buffers, &mut image.data);
         let image_data = cast_slice_mut::<_, [u8; 4]>(&mut image.data);
@@ -158,6 +174,7 @@ fn update_depth_texture(
     for (flat_index, &sk_point) in skeleton_points.iter().enumerate() {
         if sk_point == Vec3::ZERO {
             positions[flat_index] = depth_transformer.index_depth_to_world(flat_index, 4_000).to_array();
+            // positions[flat_index] = Vec3::ZERO.to_array();
         } else {
             positions[flat_index] = depth_transformer.skeleton_point_to_world(sk_point).to_array();
         }
@@ -176,6 +193,38 @@ fn update_depth_texture(
                 positions[j2] = positions[j0];
                 break;
             }
+            // if skeleton_points[j0] != Vec3::ZERO
+            //     && (skeleton_points[j1] == Vec3::ZERO || skeleton_points[j2] == Vec3::ZERO)
+            // {
+            //     positions[j1] = positions[j0];
+            //     positions[j2] = positions[j0];
+            //     break;
+            // }
+            // if positions[j0] != [0.0, 0.0, 0.0]
+            //     && (positions[j1] == [0.0, 0.0, 0.0] || positions[j2] == [0.0, 0.0, 0.0])
+            // {
+            //     positions[j1] = positions[j0];
+            //     positions[j2] = positions[j0];
+            //     break;
+            // }
         }
     }
+    // recomputing aabb fixes the issue where it disappeared when zoomed in
+    if let Some(new_aabb) = mesh.compute_aabb() {
+        *aabb = new_aabb;
+    }
 }
+
+// #[derive(AsBindGroup, Debug, Clone, TypeUuid)]
+// #[uuid = "b62bb455-a72c-4b56-87bb-81e0554e234f"]
+// pub struct CustomMaterial {
+//     #[texture(0)]
+//     #[sampler(1)]
+//     texture: Handle<Image>,
+// }
+
+// impl Material for CustomMaterial {
+//     // fn fragment_shader() -> ShaderRef {
+//     //     "shaders/custom_material_screenspace_texture.wgsl".into()
+//     // }
+// }

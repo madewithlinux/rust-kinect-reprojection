@@ -6,7 +6,6 @@ pub mod debug_coordinates;
 pub mod delay_buffer;
 pub mod depth_texture;
 pub mod dock_ui;
-pub mod frame_display;
 pub mod frame_visualization_util;
 pub mod point_cloud;
 pub mod receiver;

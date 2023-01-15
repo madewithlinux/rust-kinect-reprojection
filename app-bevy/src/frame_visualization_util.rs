@@ -1,4 +1,3 @@
-use array2d::Array2D;
 use bevy::prelude::*;
 use bytemuck::cast_slice_mut;
 
@@ -7,36 +6,20 @@ use crate::{receiver::KinectFrameBuffers, DEPTH_HEIGHT, DEPTH_WIDTH};
 #[derive(Component, Default, Debug, Reflect, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FrameBufferDescriptor {
     #[default]
-    CurrentColor,
-    CurrentDepth,
-    DerivedDepth,
-    CurrentPlayerIndex,
-    DerivedPlayerIndex,
-    DepthBaseline,
-    ActiveDepth,
-    ActiveColor,
-    PointCloud,
+    Rgba,
+    Depth,
+    PlayerIndex,
     SkeletonPointCloud,
 }
 
 pub fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, image_data: &mut [u8]) {
     let image_data = cast_slice_mut::<_, [u8; 4]>(image_data);
     match descriptor {
-        FrameBufferDescriptor::CurrentColor => color_frame_to_pixels(&buffers.current_frame.rgba, image_data),
-        FrameBufferDescriptor::CurrentDepth => depth_frame_to_pixels(&buffers.current_frame.depth, image_data),
-        FrameBufferDescriptor::DerivedDepth => depth_frame_to_pixels(&buffers.derived_frame.depth, image_data),
-        FrameBufferDescriptor::DepthBaseline => depth_frame_to_pixels(&buffers.depth_baseline_frame, image_data),
-        FrameBufferDescriptor::ActiveDepth => depth_frame_to_pixels(&buffers.active_depth, image_data),
-        FrameBufferDescriptor::ActiveColor => color_frame_to_pixels(&buffers.active_color, image_data),
-        FrameBufferDescriptor::CurrentPlayerIndex => {
-            player_index_frame_to_pixels(&buffers.current_frame.player_index, image_data)
-        }
-        FrameBufferDescriptor::DerivedPlayerIndex => {
-            player_index_frame_to_pixels(&buffers.derived_frame.player_index, image_data)
-        }
-        FrameBufferDescriptor::PointCloud => point_cloud_to_pixels(&buffers.point_cloud, image_data),
+        FrameBufferDescriptor::Rgba => color_frame_to_pixels(&buffers.rgba, image_data),
+        FrameBufferDescriptor::Depth => depth_frame_to_pixels(&buffers.depth, image_data),
+        FrameBufferDescriptor::PlayerIndex => player_index_frame_to_pixels(&buffers.player_index, image_data),
         FrameBufferDescriptor::SkeletonPointCloud => {
-            vec3_cloud_to_pixels(&buffers.current_frame.skeleton_points, image_data, 1_000.0)
+            vec3_cloud_to_pixels(&buffers.skeleton_points, image_data, 1_000.0)
         }
     }
 }
@@ -49,10 +32,6 @@ pub fn update_framebuffer_images(
     frame_buffer_handle_query: Query<&FrameBufferImageHandle>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    if buffers.derived_frame.depth.len() == 0 {
-        return;
-    }
-
     for FrameBufferImageHandle(buffer_name, handle) in frame_buffer_handle_query.iter() {
         if let Some(image) = images.get_mut(&handle) {
             get_buffer(buffer_name, &buffers, &mut image.data);
@@ -79,18 +58,6 @@ fn vec3_cloud_to_pixels(point_cloud: &[Vec3], image_data: &mut [[u8; 4]], scale:
             ((v.x.abs() * scale) % 256.0) as u8,
             ((v.y.abs() * scale) % 256.0) as u8,
             ((v.z.abs() * scale) % 256.0) as u8,
-            255,
-        ];
-    }
-}
-
-fn point_cloud_to_pixels(point_cloud: &Array2D<Vec3>, image_data: &mut [[u8; 4]]) {
-    assert_eq!(image_data.len(), DEPTH_HEIGHT * DEPTH_WIDTH);
-    for (i, v) in point_cloud.elements_row_major_iter().enumerate() {
-        image_data[i] = [
-            ((v.x.abs() * 1_000.0) % 256.0) as u8,
-            ((v.y.abs() * 1_000.0) % 256.0) as u8,
-            ((v.z.abs() * 1_000.0) % 256.0) as u8,
             255,
         ];
     }

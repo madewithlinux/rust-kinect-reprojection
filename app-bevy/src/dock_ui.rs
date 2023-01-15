@@ -18,7 +18,6 @@ use smooth_bevy_cameras::controllers::orbit::{OrbitCameraBundle, OrbitCameraCont
 use smooth_bevy_cameras::LookTransformPlugin;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
-use crate::receiver::load_baseline_frame;
 use crate::vr_connector::OpenVrPoseData;
 use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH};
 
@@ -111,15 +110,12 @@ impl UiState {
     pub fn new() -> Self {
         let mut tree = Tree::new(vec![
             Window::GameView,
-            Window::FrameBuffer(FrameBufferDescriptor::CurrentColor),
-            Window::FrameBuffer(FrameBufferDescriptor::PointCloud),
+            Window::FrameBuffer(FrameBufferDescriptor::Rgba),
             Window::FrameBuffer(FrameBufferDescriptor::SkeletonPointCloud),
-            // Window::FrameBuffer(FrameBufferDescriptor::ActiveColor),
-            // Window::FrameBuffer(FrameBufferDescriptor::ActiveDepth),
             // Window::FrameBuffer(FrameBufferDescriptor::CurrentDepth),
             // Window::FrameBuffer(FrameBufferDescriptor::CurrentPlayerIndex),
-            Window::FrameBuffer(FrameBufferDescriptor::DerivedDepth),
-            Window::FrameBuffer(FrameBufferDescriptor::DerivedPlayerIndex),
+            Window::FrameBuffer(FrameBufferDescriptor::Depth),
+            Window::FrameBuffer(FrameBufferDescriptor::PlayerIndex),
         ]);
         // let [game, _inspector] = tree.split_right(NodeIndex::root(), 0.75, vec![Window::Inspector]);
         let game = NodeIndex::root();
@@ -267,7 +263,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
         if ui.button("save color frame").clicked() {
             let current_frame = world
                 .resource::<crate::receiver::KinectFrameBuffers>()
-                .current_frame
+                .frame_history[0]
                 .clone();
             pool.spawn(async move {
                 info!("saving color frame");
@@ -294,7 +290,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
         if ui.button("save depth frame").clicked() {
             let current_frame = world
                 .resource::<crate::receiver::KinectFrameBuffers>()
-                .current_frame
+                .frame_history[0]
                 .clone();
             pool.spawn(async move {
                 info!("saving depth frame");
@@ -318,19 +314,6 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
             .detach();
         }
 
-        if ui.button("open depth baseline image").clicked() {
-            if let Some(depth_filename) = rfd::FileDialog::new()
-                .add_filter("png", &["png", "PNG"])
-                .set_title("open depth baseline image")
-                .set_file_name("kinect_depth_data_empty.png")
-                .pick_file()
-            {
-                world
-                    .resource_mut::<crate::receiver::KinectFrameBuffers>()
-                    .depth_baseline_frame = load_baseline_frame(depth_filename).unwrap();
-            }
-        }
-
         ui.heading("timing");
         egui::Grid::new("timing")
             .num_columns(2)
@@ -341,7 +324,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 if buffers.frame_history.len() < 2 {
                     return;
                 }
-                let depth_timestamp = buffers.current_frame.depth_frame_info.timestamp;
+                let depth_timestamp = buffers.frame_history[0].depth_frame_info.timestamp;
 
                 let system_timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
 
@@ -412,7 +395,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
             .striped(true)
             .show(ui, |ui| {
                 let frame_buffers = world.resource::<crate::receiver::KinectFrameBuffers>();
-                let skeleton_frame = &frame_buffers.current_frame.skeleton_frame;
+                let skeleton_frame = &frame_buffers.skeleton_frame;
                 let Some(skeleton) = skeleton_frame.skeleton_data.iter()
                     .find(|sk| sk.tracking_state == SkeletonTrackingState::Tracked)
                      else {
@@ -446,8 +429,8 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
             .striped(true)
             .show(ui, |ui| {
                 let buffers = world.resource::<crate::receiver::KinectFrameBuffers>();
-                let skeleton_frame = &buffers.current_frame.skeleton_frame;
-                let skeleton_points = &buffers.current_frame.skeleton_points;
+                let skeleton_frame = &buffers.skeleton_frame;
+                let skeleton_points = &buffers.skeleton_points;
                 if skeleton_points.len() < 1 {
                     return;
                 }

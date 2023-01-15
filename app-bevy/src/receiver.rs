@@ -1,17 +1,14 @@
 use std::f32::consts::PI;
 
-use array2d::Array2D;
 use bevy::{math::Affine3A, prelude::*};
 
-use itertools::Itertools;
 use kinect1::{
-    skeleton::{SkeletonPositionData, SkeletonPositionTrackingState},
+    skeleton::{SkeletonFrame, SkeletonPositionData, SkeletonPositionTrackingState},
     worker_v2::{start_frame_thread2, FrameMessage, FrameMessageReceiver},
 };
 
 use crate::{delay_buffer::DelayBuffer, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH, FIXED_DELAY_MS};
 
-// #[derive(Debug)]
 pub struct KinectReceiver(pub FrameMessageReceiver, pub DelayBuffer<FrameMessage>);
 
 #[derive(Resource, Debug, Default, Clone, Reflect)]
@@ -59,6 +56,7 @@ impl KinectDepthTransformer {
         bone: &[SkeletonPositionData; 2],
         depth_frame: &[u16],
     ) -> Option<(Vec3, Vec3)> {
+        // TODO: don't require depth frame here
         match (
             self.skeleton_position_to_world(&bone[0], depth_frame),
             self.skeleton_position_to_world(&bone[1], depth_frame),
@@ -68,6 +66,7 @@ impl KinectDepthTransformer {
         }
     }
     pub fn skeleton_position_to_world(&self, pos: &SkeletonPositionData, depth_frame: &[u16]) -> Option<Vec3> {
+        // TODO: don't require depth frame here
         if pos.pixel_index >= depth_frame.len()
             || pos.pixel_index == 0
             || pos.tracking_state == SkeletonPositionTrackingState::NotTracked
@@ -110,29 +109,22 @@ impl KinectDepthTransformer {
 #[reflect(Debug, Resource)]
 pub struct KinectPostProcessorConfig {
     pub history_buffer_size: usize,
-    pub depth_threshold: f32,
-    /// deprecated
-    pub baseline_threshold_background_removal_enabled: bool,
 }
 impl Default for KinectPostProcessorConfig {
     fn default() -> Self {
-        Self {
-            history_buffer_size: 2,
-            depth_threshold: 100.0,
-            baseline_threshold_background_removal_enabled: false,
-        }
+        Self { history_buffer_size: 2 }
     }
 }
 
 #[derive(Resource)]
 pub struct KinectFrameBuffers {
     // viewable buffers
-    pub current_frame: FrameMessage,
-    pub derived_frame: FrameMessage,
-    pub depth_baseline_frame: Vec<u16>,
-    pub active_depth: Vec<u16>,
-    pub active_color: Vec<[u8; 4]>,
-    pub point_cloud: Array2D<Vec3>,
+    pub rgba: Vec<[u8; 4]>,
+    // these ones may be derived values (if config.history_buffer_size > 1)
+    pub depth: Vec<u16>,
+    pub player_index: Vec<u8>,
+    pub skeleton_points: Vec<Vec3>,
+    pub skeleton_frame: SkeletonFrame,
     // non-viewable data
     pub frame_history: std::collections::VecDeque<FrameMessage>,
 }
@@ -141,26 +133,12 @@ impl Default for KinectFrameBuffers {
     fn default() -> Self {
         let width = COLOR_WIDTH;
         let height = COLOR_HEIGHT;
-        let color_frame = vec![Default::default(); width * height];
-        let depth_frame = vec![Default::default(); width * height];
-        let player_index = vec![Default::default(); width * height];
-        let frame_message = FrameMessage {
-            width,
-            height,
-            rgba: color_frame.clone(),
-            depth: depth_frame.clone(),
-            player_index: player_index.clone(),
-            color_frame_info: Default::default(),
-            depth_frame_info: Default::default(),
-            ..Default::default()
-        };
         Self {
-            current_frame: frame_message.clone(),
-            derived_frame: frame_message.clone(),
-            depth_baseline_frame: depth_frame.clone(),
-            active_depth: depth_frame.clone(),
-            active_color: color_frame.clone(),
-            point_cloud: Array2D::filled_with(Vec3::default(), COLOR_HEIGHT, COLOR_WIDTH),
+            rgba: vec![Default::default(); width * height],
+            depth: vec![Default::default(); width * height],
+            player_index: vec![Default::default(); width * height],
+            skeleton_points: vec![Default::default(); width * height],
+            skeleton_frame: Default::default(),
             frame_history: Default::default(),
         }
     }
@@ -170,7 +148,6 @@ fn receive_kinect_current_frame(
     mut receiver: NonSendMut<KinectReceiver>,
     config: Res<KinectPostProcessorConfig>,
     mut buffers: ResMut<KinectFrameBuffers>,
-    depth_transformer: Res<KinectDepthTransformer>,
 ) {
     while let Ok(received_frame) = receiver.0.try_recv() {
         receiver.1.push_for_timestamp(
@@ -181,9 +158,8 @@ fn receive_kinect_current_frame(
             received_frame,
         );
     }
-    // if let Ok(received_frame) = receiver.0.try_recv() {
     if let Some(received_frame) = receiver.1.pop_for_delay(FIXED_DELAY_MS) {
-        process_received_frame(received_frame, &config, &mut buffers, &depth_transformer);
+        process_received_frame(received_frame, &config, &mut buffers);
     }
 }
 
@@ -191,70 +167,34 @@ fn process_received_frame(
     received_frame: FrameMessage,
     config: &KinectPostProcessorConfig,
     buffers: &mut KinectFrameBuffers,
-    depth_transformer: &KinectDepthTransformer,
 ) {
-    buffers.current_frame = received_frame.clone();
-    buffers.derived_frame = received_frame.clone();
+    buffers.rgba.copy_from_slice(&received_frame.rgba);
+    buffers.depth.copy_from_slice(&received_frame.depth);
+    buffers.player_index.copy_from_slice(&received_frame.player_index);
+    buffers.skeleton_points.copy_from_slice(&received_frame.skeleton_points);
+    buffers.skeleton_frame = received_frame.skeleton_frame.clone();
+
+    buffers.frame_history.push_front(received_frame);
+    while buffers.frame_history.len() > config.history_buffer_size.max(1) {
+        buffers.frame_history.pop_back();
+    }
+    if buffers.frame_history.len() <= 1 {
+        return;
+    }
+
     for historic_frame in buffers.frame_history.iter() {
         for (i, &depth) in historic_frame.depth.iter().enumerate() {
             if depth == 0 {
                 continue;
             }
-            if buffers.derived_frame.depth[i] == 0 {
-                buffers.derived_frame.depth[i] = depth;
-                buffers.derived_frame.player_index[i] = historic_frame.player_index[i];
+            if buffers.depth[i] == 0 {
+                buffers.depth[i] = depth;
+                buffers.player_index[i] = historic_frame.player_index[i];
+                buffers.skeleton_points[i] = historic_frame.skeleton_points[i];
             }
         }
+        // TODO: should we terminate the loop through historic buffers if no changes were made?
     }
-    while buffers.frame_history.len() > config.history_buffer_size {
-        buffers.frame_history.pop_back();
-    }
-    buffers.frame_history.push_front(received_frame.clone());
-
-    if config.baseline_threshold_background_removal_enabled {
-        baseline_threshold_background_removal(config, buffers);
-    }
-
-    for (index, &depth) in buffers.derived_frame.depth.iter().enumerate() {
-        let i = index % buffers.derived_frame.width;
-        let j = index / buffers.derived_frame.width;
-        buffers.point_cloud[(j as usize, i as usize)] = depth_transformer.index_depth_to_world(index, depth);
-    }
-}
-
-pub fn baseline_threshold_background_removal(config: &KinectPostProcessorConfig, buffers: &mut KinectFrameBuffers) {
-    // subtract depth using depth threshold
-    let depth_threshold = config.depth_threshold as u16;
-
-    for (i, &current_depth) in buffers.derived_frame.depth.iter().enumerate() {
-        let baseline_depth = buffers.depth_baseline_frame[i];
-        buffers.active_depth[i] = match (current_depth, baseline_depth) {
-            (0, _) => 0u16,
-            (value, 0) => value,
-            (value, baseline) if value < baseline && (value + depth_threshold) < baseline => value,
-            _ => 0u16,
-        };
-    }
-
-    for (i, &depth) in buffers.active_depth.iter().enumerate() {
-        buffers.active_color[i] = if depth != 0 {
-            buffers.current_frame.rgba[i]
-        } else {
-            [0, 0, 0, 255]
-        };
-    }
-}
-
-pub fn load_baseline_frame(path: impl AsRef<std::path::Path>) -> Result<Vec<u16>, image::ImageError> {
-    image::open(path).map(|img| img.into_luma16().iter().cloned().collect_vec())
-}
-pub fn try_load_baseline_frame(path: impl AsRef<std::path::Path>) -> Vec<u16> {
-    image::open(path)
-        .map(|img| img.into_luma16().iter().cloned().collect_vec())
-        .unwrap_or_else(|_| {
-            info!("failed to load depth baseline frame");
-            vec![0; DEPTH_WIDTH * DEPTH_HEIGHT]
-        })
 }
 
 fn setup_kinect_receiver(world: &mut World) {
@@ -262,18 +202,7 @@ fn setup_kinect_receiver(world: &mut World) {
     world.insert_non_send_resource(KinectReceiver(receiver, Default::default()));
     world.insert_resource(KinectDepthTransformer::new());
     world.insert_resource(KinectPostProcessorConfig::default());
-    world.insert_resource(KinectFrameBuffers {
-        depth_baseline_frame: try_load_baseline_frame("kinect_depth_data_empty.png"),
-        ..Default::default()
-    });
-    // world.spawn((
-    //     Name::new("frame and buffer"),
-    //     KinectPostProcessorConfig::default(),
-    //     KinectFrameBuffers {
-    //         depth_baseline_frame: try_load_baseline_frame("kinect_depth_data_empty.png"),
-    //         ..Default::default()
-    //     },
-    // ));
+    world.insert_resource(KinectFrameBuffers::default());
 }
 
 pub struct KinectReceiverPlugin;

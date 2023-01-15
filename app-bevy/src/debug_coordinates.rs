@@ -26,14 +26,14 @@ fn skeleton_lines(
     mut lines: ResMut<DebugLines>,
     depth_transformer: Res<KinectDepthTransformer>,
 ) {
-    for &skeleton in buffers.current_frame.skeleton_frame.skeleton_data.iter() {
+    for &skeleton in buffers.skeleton_frame.skeleton_data.iter() {
         if skeleton.tracking_state == SkeletonTrackingState::NotTracked {
             info!("skip skeleton");
             continue;
         }
 
         for bone in skeleton.get_skeleton_bones() {
-            let Some((start_xyz, end_xyz)) = depth_transformer.skeleton_bone_to_world(&bone, &buffers.derived_frame.depth) else {
+            let Some((start_xyz, end_xyz)) = depth_transformer.skeleton_bone_to_world(&bone, &buffers.depth) else {
                 continue;
             };
             let [start_color, end_color] = bone.map(|p| match p.tracking_state {
@@ -112,8 +112,8 @@ fn debug_coordinate_matchup(
     depth_transformer: Res<KinectDepthTransformer>,
     mut lines: ResMut<DebugLines>,
 ) {
-    let depth = &buffers.current_frame.depth;
-    let skeleton_points = &buffers.current_frame.skeleton_points;
+    let depth = &buffers.depth;
+    let skeleton_points = &buffers.skeleton_points;
     if skeleton_points.len() < 1 {
         return;
     }
