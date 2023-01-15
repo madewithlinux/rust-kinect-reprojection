@@ -14,8 +14,8 @@ use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
 use image::{ImageBuffer, Luma};
 use kinect1::skeleton::SkeletonTrackingState;
-use smooth_bevy_cameras::LookTransformPlugin;
 use smooth_bevy_cameras::controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin};
+use smooth_bevy_cameras::LookTransformPlugin;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
 use crate::receiver::load_baseline_frame;
@@ -455,7 +455,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 ui.label("VR");
                 ui.label("skel");
                 ui.end_row();
-                for (openvr_point, kinect_image_point) in crate::point_cloud::REFERENCE_POINTS.iter() {
+                for (openvr_point, kinect_image_point) in crate::debug_coordinates::REFERENCE_POINTS.iter() {
                     let openvr_point = *openvr_point;
                     let flat_index = kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH;
                     let skel_point = skeleton_points[flat_index];
@@ -466,11 +466,12 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 }
 
                 if ui.button("print them").clicked() {
-                    let to_print = crate::point_cloud::REFERENCE_POINTS.map(|(openvr_point, kinect_image_point)| {
-                        let flat_index = kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH;
-                        let skel_point = skeleton_points[flat_index];
-                        (openvr_point, kinect_image_point, skel_point)
-                    });
+                    let to_print =
+                        crate::debug_coordinates::REFERENCE_POINTS.map(|(openvr_point, kinect_image_point)| {
+                            let flat_index = kinect_image_point.0 + kinect_image_point.1 * DEPTH_WIDTH;
+                            let skel_point = skeleton_points[flat_index];
+                            (openvr_point, kinect_image_point, skel_point)
+                        });
                     println!("VR-kinect matchup: {:?}", to_print);
                 };
                 ui.end_row();

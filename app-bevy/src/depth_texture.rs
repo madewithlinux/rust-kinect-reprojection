@@ -1,17 +1,13 @@
-use bevy::{math::Affine3A, prelude::*};
-use bevy_render::{mesh::VertexAttributeValues, render_resource::PrimitiveTopology};
-use bytemuck::checked::cast_slice_mut;
-use genmesh::{
-    generators::{IndexedPolygon, SharedVertex},
-    MapVertex, Triangulate,
+use bevy::prelude::*;
+use bevy_render::{
+    mesh::{Indices, VertexAttributeValues},
+    render_resource::PrimitiveTopology,
 };
-
+use bytemuck::checked::{cast_slice, cast_slice_mut};
+use itertools::Itertools;
 
 use crate::{
-    dock_ui::MainCamera,
-    frame_visualization_util::{get_buffer, FrameBufferDescriptor, FrameBufferImageHandle},
     receiver::{KinectDepthTransformer, KinectFrameBuffers},
-    util::draw_debug_axes,
     COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH,
 };
 
@@ -33,15 +29,6 @@ fn spawn_depth_texture(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    // let plane = genmesh::generators::Plane::subdivide(DEPTH_WIDTH, DEPTH_HEIGHT);
-    // let vertices = plane.shared_vertex_iter().collect_vec();
-    // let f1 = plane
-    //     .indexed_polygon_iter()
-    //     .triangulate()
-    //     .map(|f| f.map_vertex(|u| vertices[u]))
-    //     .collect_vec();
-    // let f0: Vec<_> = plane.triangulate().collect();
-
     let image_handle = images.add(Image::new_fill(
         bevy_render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
@@ -106,7 +93,7 @@ fn make_subdivided_quad(width: usize, height: usize) -> Mesh {
     }
 
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-    mesh.set_indices(Some(bevy_render::mesh::Indices::U32(indices)));
+    mesh.set_indices(Some(Indices::U32(indices)));
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
@@ -125,6 +112,16 @@ fn update_depth_texture(
         info!("depth frame empty");
         return;
     }
+    let rgba = &buffers.current_frame.rgba;
+    let skeleton_points = &buffers.current_frame.skeleton_points;
+    let depths = &buffers.current_frame.depth;
+    let player_indexes = &buffers.current_frame.player_index;
+    // TODO: refactor and put this somewhere else
+    let depths = depths
+        .iter()
+        .zip(player_indexes.iter())
+        .map(|(depth, player_index)| if *player_index > 0 { *depth } else { 0 })
+        .collect_vec();
 
     let (_marker, mesh_handle, material_handle) = depth_texture.single();
     let Some(material) = materials.get_mut(&material_handle) else {
@@ -138,13 +135,7 @@ fn update_depth_texture(
     if let Some(image) = images.get_mut(image_handle) {
         // get_buffer(&FrameBufferDescriptor::CurrentColor, &buffers, &mut image.data);
         let image_data = cast_slice_mut::<_, [u8; 4]>(&mut image.data);
-        for (flat_index, (&rgba, &depth)) in buffers
-            .current_frame
-            .rgba
-            .iter()
-            .zip(buffers.current_frame.depth.iter())
-            .enumerate()
-        {
+        for (flat_index, (&rgba, &depth)) in rgba.iter().zip(depths.iter()).enumerate() {
             image_data[flat_index] = if depth == 0 { [0, 0, 0, 0] } else { rgba };
         }
     } else {
@@ -155,15 +146,36 @@ fn update_depth_texture(
         info!("mesh not found");
         return;
     };
+    let Some(Indices::U32(indices)) = mesh.indices().map(|indices| indices.clone()) else {
+        info!("mesh has bad indices");
+        return;
+    };
+
     let Some(VertexAttributeValues::Float32x3(positions)) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) else {
         info!("position attribute missing from mesh");
         return;
     };
-    for (flat_index, &sk_point) in buffers.current_frame.skeleton_points.iter().enumerate() {
+    for (flat_index, &sk_point) in skeleton_points.iter().enumerate() {
         if sk_point == Vec3::ZERO {
             positions[flat_index] = depth_transformer.index_depth_to_world(flat_index, 4_000).to_array();
         } else {
             positions[flat_index] = depth_transformer.skeleton_point_to_world(sk_point).to_array();
+        }
+    }
+
+    // fixup dangling triangles to have all-or-none valid vertex positions
+    let indices = cast_slice::<_, [u32; 3]>(&indices);
+    for [i0, i1, i2] in indices.iter() {
+        let i0 = *i0 as usize;
+        let i1 = *i1 as usize;
+        let i2 = *i2 as usize;
+        for [j0, j1, j2] in [[i0, i1, i2], [i1, i2, i0], [i2, i0, i1]] {
+            // if player_indexes[j0] > 0 && (player_indexes[j1] == 0 || player_indexes[j2] == 0) {
+            if depths[j0] > 0 && (depths[j1] == 0 || depths[j2] == 0) {
+                positions[j1] = positions[j0];
+                positions[j2] = positions[j0];
+                break;
+            }
         }
     }
 }
