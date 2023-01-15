@@ -14,6 +14,8 @@ use egui_dock::{NodeIndex, Tree};
 use egui_gizmo::GizmoMode;
 use image::{ImageBuffer, Luma};
 use kinect1::skeleton::SkeletonTrackingState;
+use smooth_bevy_cameras::LookTransformPlugin;
+use smooth_bevy_cameras::controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin};
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
 use crate::receiver::load_baseline_frame;
@@ -30,6 +32,9 @@ impl Plugin for AppUiDockPlugin {
             .insert_resource(UiState::new())
             .add_system_to_stage(CoreStage::PreUpdate, show_ui_system.at_end())
             // .add_startup_system(spawn_2d_camera)
+            .add_plugin(LookTransformPlugin)
+            .add_plugin(OrbitCameraPlugin::default())
+            .add_startup_system(spawn_orbit_camera)
             .add_system(set_camera_viewport)
             .add_system(set_gizmo_mode)
             .add_system(update_framebuffer_images)
@@ -601,4 +606,15 @@ fn select_asset(ui: &mut egui::Ui, type_registry: &TypeRegistry, world: &World, 
 
 fn spawn_2d_camera(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default()).insert(MainCamera);
+}
+
+fn spawn_orbit_camera(mut commands: Commands) {
+    commands
+        .spawn(Camera3dBundle::default())
+        .insert(OrbitCameraBundle::new(
+            OrbitCameraController::default(),
+            Vec3::new(0.5, 3.6, 2.6),
+            Vec3::new(0.0, 0.0, -0.8),
+        ))
+        .insert(MainCamera);
 }

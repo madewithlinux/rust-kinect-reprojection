@@ -130,29 +130,28 @@ fn spawn_vr_pose_markers(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // lights
-    for transform in [
-        Transform::from_xyz(0.0, 2.0, 0.0),
-        Transform::from_xyz(2.0, 2.0, 2.0),
-        Transform::from_xyz(-2.0, 2.0, 2.0),
-    ] {
-        commands.spawn(PointLightBundle {
-            point_light: PointLight {
-                intensity: 500.0,
-                shadows_enabled: false,
-                ..default()
-            },
-            transform,
-            ..default()
-        });
-    }
+    let green = materials.add(StandardMaterial {
+        base_color: Color::rgb(0.0, 1.0, 0.0),
+        unlit: true,
+        ..Default::default()
+    });
+    let red = materials.add(StandardMaterial {
+        base_color: Color::rgb(1.0, 0.0, 0.0),
+        unlit: true,
+        ..Default::default()
+    });
+    let blue = materials.add(StandardMaterial {
+        base_color: Color::rgb(0.0, 0.0, 1.0),
+        unlit: true,
+        ..Default::default()
+    });
 
     commands.spawn((
         Name::new("hmd"),
         VrPoseMarker::Hmd,
         PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Box::new(0.180, 0.12, 0.30))),
-            material: materials.add(Color::rgb(0.0, 1.0, 0.0).into()),
+            material: green,
             ..default()
         },
     ));
@@ -172,7 +171,7 @@ fn spawn_vr_pose_markers(
         .with_children(|parent| {
             parent.spawn((PbrBundle {
                 mesh: capsule.clone(),
-                material: materials.add(Color::rgb(1.0, 0.0, 0.0).into()),
+                material: red,
                 transform: Transform::from_rotation(Quat::from_axis_angle(Vec3::X, PI / 2.0))
                     .with_translation(Vec3::new(0.0, 0.0, 0.15 / 2.0)),
                 ..default()
@@ -188,7 +187,7 @@ fn spawn_vr_pose_markers(
         .with_children(|parent| {
             parent.spawn((PbrBundle {
                 mesh: capsule,
-                material: materials.add(Color::rgb(0.0, 0.0, 1.0).into()),
+                material: blue,
                 transform: Transform::from_rotation(Quat::from_axis_angle(Vec3::X, PI / 2.0))
                     .with_translation(Vec3::new(0.0, 0.0, 0.15 / 2.0)),
                 ..default()

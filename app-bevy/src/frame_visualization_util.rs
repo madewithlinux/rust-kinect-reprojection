@@ -19,7 +19,7 @@ pub enum FrameBufferDescriptor {
     SkeletonPointCloud,
 }
 
-fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, image_data: &mut [u8]) {
+pub fn get_buffer(descriptor: &FrameBufferDescriptor, buffers: &KinectFrameBuffers, image_data: &mut [u8]) {
     let image_data = cast_slice_mut::<_, [u8; 4]>(image_data);
     match descriptor {
         FrameBufferDescriptor::CurrentColor => color_frame_to_pixels(&buffers.current_frame.rgba, image_data),
