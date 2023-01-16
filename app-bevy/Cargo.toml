@@ -19,8 +19,11 @@ bevy = { version = "0.9", features = ["dynamic"] }
 bevy_reflect = { version = "0.9" }
 bevy_asset = { version = "0.9" }
 bevy_render = { version = "0.9" }
-bevy_framepace = "0.9"
+# bevy_framepace = "0.9"
 bevy_prototype_debug_lines = { version = "0.9", features = ["3d"] }
+
+bevy_osc = "0.5.0"
+nannou_osc = "0.18.0"
 
 bevy-inspector-egui = { version = "0.16.0-pre.2", default-features = false, features=["bevy_pbr"] }
 egui = "0.20.0"
@@ -29,8 +32,6 @@ egui_dock = "0.3"
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo", rev = "516dc8453bb6423d8cf050af172e854611a8a1d9" }
 rfd = "0.10.0"
 bytemuck = "1.12.3"
-
-genmesh = "0.6.2"
 
 # bevy-aabb-instancing = "0.7.0"
 # smooth-bevy-cameras = "0.6.0"

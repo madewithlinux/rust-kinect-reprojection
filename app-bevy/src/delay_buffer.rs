@@ -18,7 +18,7 @@ pub fn query_performance_counter_ms() -> i64 {
     counter / *PERFORMANCE_TICKS_PER_MS
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct DelayBuffer<T> {
     dequeue: std::collections::VecDeque<(i64, T)>,
 }

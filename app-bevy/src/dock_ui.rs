@@ -25,7 +25,6 @@ pub struct AppUiDockPlugin;
 impl Plugin for AppUiDockPlugin {
     fn build(&self, app: &mut App) {
         app //
-            // .add_plugin(bevy_framepace::FramepacePlugin) // reduces input lag
             .add_plugin(DefaultInspectorConfigPlugin)
             .add_plugin(bevy_egui::EguiPlugin)
             .insert_resource(UiState::new())

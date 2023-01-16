@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy_prototype_debug_lines::DebugLinesPlugin;
 use dock_ui::MainCamera;
 
+pub mod camera2_vmc_osc_receiver;
 pub mod debug_coordinates;
 pub mod delay_buffer;
 pub mod depth_texture;
@@ -39,6 +40,7 @@ pub fn app_main() {
         .add_plugin(debug_coordinates::DebugCoordinatesPlugin)
         .add_plugin(dock_ui::AppUiDockPlugin)
         .add_plugin(vr_connector::VrConnectorPlugin)
+        .add_plugin(camera2_vmc_osc_receiver::OscReceiverPlugin)
         .register_type::<MainCamera>()
         .register_type::<frame_visualization_util::FrameBufferImageHandle>()
         .register_type::<frame_visualization_util::FrameBufferDescriptor>()
