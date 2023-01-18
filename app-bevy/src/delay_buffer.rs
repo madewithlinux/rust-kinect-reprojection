@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 
+// TODO: use once_cell instead?
 lazy_static! {
     static ref PERFORMANCE_TICKS_PER_MS: i64 = {
         let mut freq = 0;

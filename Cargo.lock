@@ -500,6 +500,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_framepace"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5ae983870b93cdc5bc3484dd6928d7c3217e4a31ccbe4dfb0680dc00c06b47f"
+dependencies = [
+ "bevy",
+ "wasm_thread",
+]
+
+[[package]]
 name = "bevy_gilrs"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2439,6 +2449,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fad582f4b9e86b6caa621cabeb0963332d92eea04729ab12892c2533951e6440"
 
 [[package]]
+name = "iyes_loopless"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c47fd2cbdb1d7f295c25e6bfccfd78a84b6eef3055bc9f01b34ae861721b01ee"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_time",
+ "bevy_utils",
+]
+
+[[package]]
 name = "jni"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3659,6 +3681,7 @@ dependencies = [
  "bevy-inspector-egui",
  "bevy_asset",
  "bevy_egui",
+ "bevy_framepace",
  "bevy_osc",
  "bevy_prototype_debug_lines",
  "bevy_reflect",
@@ -3669,12 +3692,16 @@ dependencies = [
  "egui_dock",
  "image 0.24.5",
  "itertools",
+ "iyes_loopless",
  "kinect1",
  "lazy_static",
  "nannou_osc",
+ "once_cell",
  "openvr",
  "ordered-float",
  "rfd",
+ "serde",
+ "serde_json",
  "smooth-bevy-cameras",
  "thiserror",
  "windows 0.43.0",
@@ -4353,6 +4380,19 @@ name = "wasm-bindgen-shared"
 version = "0.2.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
+
+[[package]]
+name = "wasm_thread"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a52fc987e67957cab58160d1ea273a2886972ef6f59c7fa0c02e9fe2c8e11706"
+dependencies = [
+ "async-channel",
+ "futures",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
 
 [[package]]
 name = "wayland-client"

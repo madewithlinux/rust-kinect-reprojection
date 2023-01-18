@@ -1,0 +1,11 @@
+{
+  "ui_mode": "Game",
+  "kinect_enabled": true,
+  "vr_input_enabled": false,
+  "camera2_vmc_enabled": true,
+  "history_buffer_size": 2,
+  "fixed_delay_ms": 500,
+  "show_debug_axes": true,
+  "show_debug_entities": true,
+  "show_debug_skeleton": true
+}

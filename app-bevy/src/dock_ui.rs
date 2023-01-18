@@ -19,7 +19,7 @@ use smooth_bevy_cameras::LookTransformPlugin;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
 use crate::vr_connector::OpenVrPoseData;
-use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH};
+use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH, MainCamera};
 
 pub struct AppUiDockPlugin;
 impl Plugin for AppUiDockPlugin {
@@ -41,9 +41,6 @@ impl Plugin for AppUiDockPlugin {
             .register_type::<AlphaMode>();
     }
 }
-
-#[derive(Component, Reflect)]
-pub struct MainCamera;
 
 fn show_ui_system(world: &mut World) {
     let mut egui_context = world.resource_mut::<bevy_egui::EguiContext>().ctx_mut().clone();

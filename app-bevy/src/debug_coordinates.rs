@@ -1,9 +1,11 @@
 use bevy::{math::Affine3A, prelude::*};
 use bevy_prototype_debug_lines::*;
+use iyes_loopless::prelude::*;
 
 use kinect1::skeleton::{SkeletonPositionIndex, SkeletonPositionTrackingState, SkeletonTrackingState};
 
 use crate::{
+    app_settings::{debug_axes_enabled, debug_coordinate_matchup_enabled, debug_skeleton_enabled},
     receiver::{KinectDepthTransformer, KinectFrameBuffers},
     util::draw_debug_axes,
 };
@@ -12,12 +14,9 @@ pub struct DebugCoordinatesPlugin;
 impl Plugin for DebugCoordinatesPlugin {
     fn build(&self, app: &mut App) {
         app //
-
-            .add_system(skeleton_lines)
-            .add_system(axis_references)
-            .add_system(debug_coordinate_matchup)
-            // .register_type::<BufferIndexes>()
-            ;
+            .add_system(skeleton_lines.run_if(debug_skeleton_enabled))
+            .add_system(axis_references.run_if(debug_axes_enabled))
+            .add_system(debug_coordinate_matchup.run_if(debug_coordinate_matchup_enabled));
     }
 }
 

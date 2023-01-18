@@ -1,16 +1,22 @@
 use std::f32::consts::PI;
 
 use bevy::{math::Affine3A, prelude::*};
+use iyes_loopless::prelude::*;
 
 use kinect1::{
     skeleton::{SkeletonFrame, SkeletonPositionData, SkeletonPositionTrackingState},
     worker_v2::{start_frame_thread2, FrameMessage, FrameMessageReceiver},
 };
 
-use crate::{delay_buffer::DelayBuffer, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH, FIXED_DELAY_MS};
+use crate::{
+    app_settings::{kinect_enabled, AppSettings},
+    delay_buffer::DelayBuffer,
+    COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH, FIXED_DELAY_MS,
+};
 
 pub struct KinectReceiver(pub FrameMessageReceiver, pub DelayBuffer<FrameMessage>);
 
+// TODO: put this stuff in AppSettings as well?
 #[derive(Resource, Debug, Default, Clone, Reflect)]
 #[reflect(Debug, Resource)]
 pub struct KinectDepthTransformer {
@@ -105,17 +111,6 @@ impl KinectDepthTransformer {
     }
 }
 
-#[derive(Resource, Debug, Clone, Reflect)]
-#[reflect(Debug, Resource)]
-pub struct KinectPostProcessorConfig {
-    pub history_buffer_size: usize,
-}
-impl Default for KinectPostProcessorConfig {
-    fn default() -> Self {
-        Self { history_buffer_size: 2 }
-    }
-}
-
 #[derive(Resource)]
 pub struct KinectFrameBuffers {
     // viewable buffers
@@ -146,8 +141,8 @@ impl Default for KinectFrameBuffers {
 
 fn receive_kinect_current_frame(
     mut receiver: NonSendMut<KinectReceiver>,
-    config: Res<KinectPostProcessorConfig>,
     mut buffers: ResMut<KinectFrameBuffers>,
+    settings: Res<AppSettings>,
 ) {
     while let Ok(received_frame) = receiver.0.try_recv() {
         receiver.1.push_for_timestamp(
@@ -159,15 +154,11 @@ fn receive_kinect_current_frame(
         );
     }
     if let Some(received_frame) = receiver.1.pop_for_delay(FIXED_DELAY_MS) {
-        process_received_frame(received_frame, &config, &mut buffers);
+        process_received_frame(received_frame, &mut buffers, &settings);
     }
 }
 
-fn process_received_frame(
-    received_frame: FrameMessage,
-    config: &KinectPostProcessorConfig,
-    buffers: &mut KinectFrameBuffers,
-) {
+fn process_received_frame(received_frame: FrameMessage, buffers: &mut KinectFrameBuffers, settings: &AppSettings) {
     buffers.rgba.copy_from_slice(&received_frame.rgba);
     buffers.depth.copy_from_slice(&received_frame.depth);
     buffers.player_index.copy_from_slice(&received_frame.player_index);
@@ -175,7 +166,7 @@ fn process_received_frame(
     buffers.skeleton_frame = received_frame.skeleton_frame.clone();
 
     buffers.frame_history.push_front(received_frame);
-    while buffers.frame_history.len() > config.history_buffer_size.max(1) {
+    while buffers.frame_history.len() > settings.history_buffer_size.max(1) {
         buffers.frame_history.pop_back();
     }
     if buffers.frame_history.len() <= 1 {
@@ -200,18 +191,17 @@ fn process_received_frame(
 fn setup_kinect_receiver(world: &mut World) {
     let receiver = start_frame_thread2();
     world.insert_non_send_resource(KinectReceiver(receiver, Default::default()));
-    world.insert_resource(KinectDepthTransformer::new());
-    world.insert_resource(KinectPostProcessorConfig::default());
-    world.insert_resource(KinectFrameBuffers::default());
 }
 
 pub struct KinectReceiverPlugin;
 impl Plugin for KinectReceiverPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_kinect_receiver)
-            .add_system(receive_kinect_current_frame)
-            .add_system(update_depth_transformer)
-            .register_type::<KinectPostProcessorConfig>()
+        app //
+            .insert_resource(KinectDepthTransformer::new())
+            .insert_resource(KinectFrameBuffers::default())
+            .add_startup_system(setup_kinect_receiver.run_if(kinect_enabled))
+            .add_system(receive_kinect_current_frame.run_if(kinect_enabled))
+            .add_system(update_depth_transformer.run_if(kinect_enabled))
             .register_type::<KinectDepthTransformer>();
     }
 }

@@ -1,10 +1,13 @@
 use std::f32::consts::PI;
 
 use bevy::{math::Affine3A, prelude::*};
+use iyes_loopless::prelude::*;
+
 use bevy_prototype_debug_lines::DebugLines;
 use openvr::TrackingResult;
 
 use crate::{
+    app_settings::{debug_axes_enabled, vr_input_enabled},
     delay_buffer::{query_performance_counter_ms, DelayBuffer},
     util::draw_debug_axes,
     FIXED_DELAY_MS,
@@ -58,7 +61,6 @@ fn setup_openvr_connector(world: &mut World) {
     let context = unsafe { openvr::init(openvr::ApplicationType::Utility).unwrap() };
     let system = context.system().unwrap();
     world.insert_non_send_resource(OpenVrContextSystem(context, system));
-    world.insert_resource(OpenVrPoseData::default());
 }
 
 fn update_pose_data(
@@ -208,11 +210,22 @@ fn update_vr_pose_markers(mut query: Query<(&VrPoseMarker, &mut Transform)>, vr_
 pub struct VrConnectorPlugin;
 impl Plugin for VrConnectorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_openvr_connector)
-            .add_system(update_pose_data)
-            .add_system(debug_pose_data)
-            .add_startup_system(spawn_vr_pose_markers)
-            .add_system(update_vr_pose_markers)
+        app //
+            .insert_resource(OpenVrPoseData::default())
+            .add_startup_system(setup_openvr_connector.run_if(vr_input_enabled))
+            .add_system(update_pose_data.run_if(vr_input_enabled))
+            .add_system(debug_pose_data.run_if(vr_input_enabled).run_if(debug_axes_enabled))
+            // TODO: set visibility instead?
+            .add_startup_system(
+                spawn_vr_pose_markers
+                    .run_if(vr_input_enabled)
+                    .run_if(debug_axes_enabled),
+            )
+            .add_system(
+                update_vr_pose_markers
+                    .run_if(vr_input_enabled)
+                    .run_if(debug_axes_enabled),
+            )
             .register_type::<OpenVrPoseData>()
             .register_type::<VrPoseMarker>();
     }

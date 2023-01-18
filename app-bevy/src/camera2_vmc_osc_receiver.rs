@@ -2,10 +2,13 @@ use bevy::math::Affine3A;
 use bevy::prelude::*;
 use bevy_osc::{Osc, OscEvent, OscSettings};
 use bevy_prototype_debug_lines::DebugLines;
+use iyes_loopless::prelude::*;
 use nannou_osc::Message;
 use nannou_osc::Packet;
 use nannou_osc::Type;
 
+use crate::app_settings::camera2_vmc_enabled;
+use crate::app_settings::AppSettings;
 use crate::delay_buffer::query_performance_counter_ms;
 use crate::delay_buffer::DelayBuffer;
 use crate::util::draw_debug_axes;
@@ -18,12 +21,17 @@ pub struct VmcCameraInfo {
     pub fov: f32,
 }
 
+#[derive(Component, Debug, Default, Clone, Reflect)]
+#[reflect(Debug, Component)]
+pub struct VmcCameraMarker;
+
 #[derive(Resource, Debug, Default, Clone)]
 struct CameraReceiverBuffer(DelayBuffer<VmcCameraInfo>);
 
 pub struct OscReceiverPlugin;
 impl Plugin for OscReceiverPlugin {
     fn build(&self, app: &mut App) {
+        // TODO: how to enable/disable the OSC from here?
         app //
             .add_plugin(Osc)
             .insert_resource(OscSettings {
@@ -32,7 +40,7 @@ impl Plugin for OscReceiverPlugin {
                 ..Default::default()
             })
             .insert_resource(CameraReceiverBuffer::default())
-            .add_system(osc_event_listener_system)
+            .add_system(osc_event_listener_system.run_if(camera2_vmc_enabled))
             // .register_type()
             ;
     }
@@ -44,6 +52,7 @@ fn osc_event_listener_system(
     mut events: EventReader<OscEvent>,
     mut receive_buffer: ResMut<CameraReceiverBuffer>,
     mut lines: ResMut<DebugLines>,
+    settings: Res<AppSettings>,
 ) {
     let timestamp = query_performance_counter_ms();
     for event in events.iter() {
@@ -61,7 +70,9 @@ fn osc_event_listener_system(
                         // TODO: check if this works
                         let transform =
                             unity_to_bevy_coordinate_system([*xpos, *ypos, *zpos], [*xrot, *yrot, *zrot, *wrot]);
-                        draw_debug_axes(&mut lines, &transform, 0.2);
+                        if settings.show_debug_axes {
+                            draw_debug_axes(&mut lines, &transform, 0.2);
+                        }
                         let (scale, rotation, translation) = transform.to_scale_rotation_translation();
                         info!("timestamp   = {:?}", timestamp);
                         info!("scale       = {:?}", scale);
