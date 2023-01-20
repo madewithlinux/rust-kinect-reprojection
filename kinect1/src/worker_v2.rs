@@ -13,7 +13,8 @@ pub use kinect1_sys::{
     Vector4, NUI_SKELETON_DATA, NUI_SKELETON_FRAME, NUI_SKELETON_POSITION_TRACKING_STATE, NUI_SKELETON_TRACKING_STATE,
 };
 
-use tracing::info;
+use tracing::{info, span};
+use tracing::{instrument, Level};
 use windows::Win32::{
     Foundation::WAIT_OBJECT_0,
     System::Threading::{WaitForMultipleObjects, WaitForSingleObject},
@@ -236,6 +237,7 @@ impl ReceiverThreadData {
         call_method!(self.sensor, NuiGetCoordinateMapper, &mut self.coordinate_mapper);
     }
 
+    #[instrument(skip_all)]
     fn receive_color_frame(&mut self) {
         self.color_frame = Default::default();
         self.color_locked_rect = Default::default();
@@ -305,6 +307,7 @@ impl ReceiverThreadData {
         self.have_rgba_data = true;
     }
 
+    #[instrument(skip_all)]
     fn receive_depth_frame(&mut self) {
         self.depth_frame = Default::default();
         self.depth_locked_rect = Default::default();
@@ -426,6 +429,7 @@ impl ReceiverThreadData {
         self.have_depth_data = true;
     }
 
+    #[instrument(skip_all)]
     fn receive_skeleton_frame(&mut self) {
         call_method!(
             self.sensor,
@@ -470,13 +474,19 @@ impl ReceiverThreadData {
         self.have_skeleton_data = true;
     }
 
+    #[instrument(skip_all)]
     pub fn wait_and_receive_next_frame(&mut self) -> FrameMessage {
         let width = self.color_width;
         let height = self.color_height;
-        self.processed_rgba.resize(width * height, Default::default());
-        self.processed_depth.resize(width * height, Default::default());
-        self.processed_player_index.resize(width * height, Default::default());
-        self.processed_skeleton_points.resize(width * height, Default::default());
+        {
+            let span = span!(Level::INFO, "allocate");
+            let _enter = span.enter();
+            self.processed_rgba.resize(width * height, Default::default());
+            self.processed_depth.resize(width * height, Default::default());
+            self.processed_player_index.resize(width * height, Default::default());
+            self.processed_skeleton_points
+                .resize(width * height, Default::default());
+        }
 
         // TODO: should we allow sending frames that are partial duplicates?
         let mut have_new_rgba_data = false;

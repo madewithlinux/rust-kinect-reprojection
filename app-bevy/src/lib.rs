@@ -32,15 +32,22 @@ pub fn app_main() {
 
     let mut app = App::new();
     app //
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            window: WindowDescriptor {
-                title: "Kinect Reprojection".to_string(),
-                width: (COLOR_WIDTH as f32) * 2.0,
-                height: (COLOR_HEIGHT as f32) + 400.0,
-                ..default()
-            },
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    window: WindowDescriptor {
+                        title: "Kinect Reprojection".to_string(),
+                        width: (COLOR_WIDTH as f32) * 2.0,
+                        height: (COLOR_HEIGHT as f32) + 400.0,
+                        ..default()
+                    },
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    watch_for_changes: true,
+                    ..default()
+                }),
+        )
         .add_plugin(DebugLinesPlugin::default())
         .add_plugin(bevy_framepace::FramepacePlugin)
         // .add_plugin(app_settings::AppSettingsPlugin::new("app_settings.json"))

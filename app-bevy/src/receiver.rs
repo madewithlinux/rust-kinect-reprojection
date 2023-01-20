@@ -3,6 +3,9 @@ use std::f32::consts::PI;
 use bevy::{math::Affine3A, prelude::*};
 use iyes_loopless::prelude::*;
 
+use tracing::{info, span};
+use tracing::{instrument, Level};
+
 use kinect1::{
     skeleton::{SkeletonFrame, SkeletonPositionData, SkeletonPositionTrackingState},
     worker_v2::{start_frame_thread2, FrameMessage, FrameMessageReceiver},
@@ -158,12 +161,17 @@ fn receive_kinect_current_frame(
     }
 }
 
+#[instrument(skip_all)]
 fn process_received_frame(received_frame: FrameMessage, buffers: &mut KinectFrameBuffers, settings: &AppSettings) {
-    buffers.rgba.copy_from_slice(&received_frame.rgba);
-    buffers.depth.copy_from_slice(&received_frame.depth);
-    buffers.player_index.copy_from_slice(&received_frame.player_index);
-    buffers.skeleton_points.copy_from_slice(&received_frame.skeleton_points);
-    buffers.skeleton_frame = received_frame.skeleton_frame.clone();
+    {
+        let span = span!(Level::INFO, "copy");
+        let _enter = span.enter();
+        buffers.rgba.copy_from_slice(&received_frame.rgba);
+        buffers.depth.copy_from_slice(&received_frame.depth);
+        buffers.player_index.copy_from_slice(&received_frame.player_index);
+        buffers.skeleton_points.copy_from_slice(&received_frame.skeleton_points);
+        buffers.skeleton_frame = received_frame.skeleton_frame.clone();
+    }
 
     buffers.frame_history.push_front(received_frame);
     while buffers.frame_history.len() > settings.history_buffer_size.max(1) {
@@ -173,6 +181,8 @@ fn process_received_frame(received_frame: FrameMessage, buffers: &mut KinectFram
         return;
     }
 
+    let span = span!(Level::INFO, "historic_frames");
+    let _enter = span.enter();
     for historic_frame in buffers.frame_history.iter() {
         for (i, &depth) in historic_frame.depth.iter().enumerate() {
             if depth == 0 {

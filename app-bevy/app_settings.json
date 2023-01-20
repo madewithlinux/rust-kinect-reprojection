@@ -1,5 +1,5 @@
 {
-  "ui_mode": "Game",
+  "ui_mode": "Dock",
   "kinect_enabled": true,
   "vr_input_enabled": false,
   "camera2_vmc_enabled": true,

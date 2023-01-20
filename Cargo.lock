@@ -3704,6 +3704,7 @@ dependencies = [
  "serde_json",
  "smooth-bevy-cameras",
  "thiserror",
+ "tracing",
  "windows 0.43.0",
 ]
 
