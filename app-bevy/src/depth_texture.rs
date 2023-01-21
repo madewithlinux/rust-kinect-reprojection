@@ -3,7 +3,7 @@ use bevy_reflect::TypeUuid;
 use bevy_render::{
     mesh::{Indices, VertexAttributeValues},
     primitives::Aabb,
-    render_resource::{AsBindGroup, PrimitiveTopology, ShaderRef},
+    render_resource::{AsBindGroup, PrimitiveTopology, ShaderRef, TextureUsages},
 };
 use bytemuck::checked::{cast_slice, cast_slice_mut};
 use itertools::Itertools;
@@ -51,7 +51,7 @@ fn spawn_depth_texture(
         base_color_texture: Some(image_handle.clone()),
         cull_mode: None,
         // alpha_mode: AlphaMode::Blend,
-        alpha_mode: AlphaMode::Mask(0.5),
+        alpha_mode: AlphaMode::Mask(1.0),
         unlit: true,
         double_sided: true,
         ..default()
@@ -101,7 +101,7 @@ fn make_subdivided_quad(width: usize, height: usize) -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
     mesh.set_indices(Some(Indices::U32(indices)));
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    // mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh
 }
@@ -170,42 +170,42 @@ fn update_depth_texture(
     };
     for (flat_index, &sk_point) in skeleton_points.iter().enumerate() {
         if sk_point == Vec3::ZERO {
-            positions[flat_index] = depth_transformer.index_depth_to_world(flat_index, 4_000).to_array();
+            // positions[flat_index] = depth_transformer.index_depth_to_world(flat_index, 4_000).to_array();
             // positions[flat_index] = Vec3::ZERO.to_array();
         } else {
             positions[flat_index] = depth_transformer.skeleton_point_to_world(sk_point).to_array();
         }
     }
 
-    // fixup dangling triangles to have all-or-none valid vertex positions
-    let indices = cast_slice::<_, [u32; 3]>(&indices);
-    for [i0, i1, i2] in indices.iter() {
-        let i0 = *i0 as usize;
-        let i1 = *i1 as usize;
-        let i2 = *i2 as usize;
-        for [j0, j1, j2] in [[i0, i1, i2], [i1, i2, i0], [i2, i0, i1]] {
-            // if player_indexes[j0] > 0 && (player_indexes[j1] == 0 || player_indexes[j2] == 0) {
-            if depths[j0] > 0 && (depths[j1] == 0 || depths[j2] == 0) {
-                positions[j1] = positions[j0];
-                positions[j2] = positions[j0];
-                break;
-            }
-            // if skeleton_points[j0] != Vec3::ZERO
-            //     && (skeleton_points[j1] == Vec3::ZERO || skeleton_points[j2] == Vec3::ZERO)
-            // {
-            //     positions[j1] = positions[j0];
-            //     positions[j2] = positions[j0];
-            //     break;
-            // }
-            // if positions[j0] != [0.0, 0.0, 0.0]
-            //     && (positions[j1] == [0.0, 0.0, 0.0] || positions[j2] == [0.0, 0.0, 0.0])
-            // {
-            //     positions[j1] = positions[j0];
-            //     positions[j2] = positions[j0];
-            //     break;
-            // }
-        }
-    }
+    // // fixup dangling triangles to have all-or-none valid vertex positions
+    // let indices = cast_slice::<_, [u32; 3]>(&indices);
+    // for [i0, i1, i2] in indices.iter() {
+    //     let i0 = *i0 as usize;
+    //     let i1 = *i1 as usize;
+    //     let i2 = *i2 as usize;
+    //     for [j0, j1, j2] in [[i0, i1, i2], [i1, i2, i0], [i2, i0, i1]] {
+    //         // if player_indexes[j0] > 0 && (player_indexes[j1] == 0 || player_indexes[j2] == 0) {
+    //         if depths[j0] > 0 && (depths[j1] == 0 || depths[j2] == 0) {
+    //             positions[j1] = positions[j0];
+    //             positions[j2] = positions[j0];
+    //             break;
+    //         }
+    //         // if skeleton_points[j0] != Vec3::ZERO
+    //         //     && (skeleton_points[j1] == Vec3::ZERO || skeleton_points[j2] == Vec3::ZERO)
+    //         // {
+    //         //     positions[j1] = positions[j0];
+    //         //     positions[j2] = positions[j0];
+    //         //     break;
+    //         // }
+    //         // if positions[j0] != [0.0, 0.0, 0.0]
+    //         //     && (positions[j1] == [0.0, 0.0, 0.0] || positions[j2] == [0.0, 0.0, 0.0])
+    //         // {
+    //         //     positions[j1] = positions[j0];
+    //         //     positions[j2] = positions[j0];
+    //         //     break;
+    //         // }
+    //     }
+    // }
     // recomputing aabb fixes the issue where it disappeared when zoomed in
     if let Some(new_aabb) = mesh.compute_aabb() {
         *aabb = new_aabb;
@@ -228,7 +228,7 @@ fn spawn_custom_depth_texture(
         &[0, 0, 0, 255],
         bevy_render::render_resource::TextureFormat::Rgba8UnormSrgb,
     ));
-    let coordinates_handle = images.add(Image::new_fill(
+    let mut coordinates_image = Image::new_fill(
         bevy_render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
             height: COLOR_HEIGHT as u32,
@@ -237,7 +237,10 @@ fn spawn_custom_depth_texture(
         bevy::render::render_resource::TextureDimension::D2,
         cast_slice(&[0.0, 0.0, 0.0, 0.0]),
         bevy_render::render_resource::TextureFormat::Rgba32Float,
-    ));
+    );
+    coordinates_image.texture_descriptor.usage =
+        TextureUsages::COPY_DST | TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING;
+    let coordinates_handle = images.add(coordinates_image);
 
     let quad_handle = meshes.add(make_subdivided_quad(DEPTH_WIDTH, DEPTH_HEIGHT));
 
@@ -311,11 +314,11 @@ fn update_custom_depth_texture(
         let coordinates_data = cast_slice_mut::<_, [f32; 4]>(&mut coordinates.data);
         for (flat_index, &sk_point) in skeleton_points.iter().enumerate() {
             if sk_point == Vec3::ZERO {
-                coordinates_data[flat_index] = depth_transformer
-                    .index_depth_to_world(flat_index, 4_000)
-                    .extend(0.0)
-                    .to_array();
-                // coordinates_data[flat_index] = Vec3::ZERO.to_array();
+                // coordinates_data[flat_index] = depth_transformer
+                //     .index_depth_to_world(flat_index, 4_000)
+                //     .extend(0.0)
+                //     .to_array();
+                coordinates_data[flat_index] = Vec4::ZERO.to_array();
             } else {
                 coordinates_data[flat_index] = depth_transformer
                     .skeleton_point_to_world(sk_point)
@@ -361,19 +364,40 @@ pub struct CustomMaterial {
     #[texture(0)]
     #[sampler(1)]
     texture: Handle<Image>,
+
+    // #[texture(2)]
+    // #[sampler(3)]
     #[texture(2, visibility(all))]
-    #[sampler(3, visibility(all))]
+    // #[sampler(3, visibility(all))]
     coordinates: Handle<Image>,
 }
 
 impl Material for CustomMaterial {
-    // fn vertex_shader() -> ShaderRef {
-    //     "shaders/custom_material_depth_texture.wgsl".into()
-    // }
+    fn vertex_shader() -> ShaderRef {
+        "shaders/custom_material_depth_texture.wgsl".into()
+    }
     fn fragment_shader() -> ShaderRef {
         "shaders/custom_material_depth_texture.wgsl".into()
     }
     fn alpha_mode(&self) -> AlphaMode {
         AlphaMode::Blend
+    }
+    fn specialize(
+        pipeline: &bevy::pbr::MaterialPipeline<Self>,
+        descriptor: &mut bevy_render::render_resource::RenderPipelineDescriptor,
+        layout: &bevy_render::mesh::MeshVertexBufferLayout,
+        key: bevy::pbr::MaterialPipelineKey<Self>,
+    ) -> Result<(), bevy_render::render_resource::SpecializedMeshPipelineError> {
+        // let vertex = &mut descriptor.vertex;
+        // vertex.shader_defs.push("VERTEX_POSITIONS".to_string());
+        // vertex.shader_defs.push("VERTEX_NORMALS".to_string());
+        // vertex.shader_defs.push("VERTEX_UVS".to_string());
+
+        // let fragment = descriptor.fragment.as_mut().unwrap();
+        // fragment.shader_defs.push("VERTEX_POSITIONS".to_string());
+        // fragment.shader_defs.push("VERTEX_NORMALS".to_string());
+        // fragment.shader_defs.push("VERTEX_UVS".to_string());
+
+        Ok(())
     }
 }
