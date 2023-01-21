@@ -3,7 +3,7 @@ use bevy_reflect::TypeUuid;
 use bevy_render::{
     mesh::{Indices, VertexAttributeValues},
     primitives::Aabb,
-    render_resource::{AsBindGroup, PrimitiveTopology, ShaderRef, TextureUsages},
+    render_resource::{AsBindGroup, PrimitiveTopology, ShaderRef, TextureUsages, self, TextureFormat, ColorWrites, BlendState, ColorTargetState, PolygonMode},
 };
 use bytemuck::checked::{cast_slice, cast_slice_mut};
 use itertools::Itertools;
@@ -45,7 +45,7 @@ fn spawn_depth_texture(
         bevy_render::render_resource::TextureFormat::Rgba8UnormSrgb,
     ));
 
-    let quad_handle = meshes.add(make_subdivided_quad(DEPTH_WIDTH, DEPTH_HEIGHT));
+    let quad_handle = meshes.add(make_subdivided_quad(DEPTH_WIDTH, DEPTH_HEIGHT, true));
 
     let material_handle = materials.add(StandardMaterial {
         base_color_texture: Some(image_handle.clone()),
@@ -70,7 +70,7 @@ fn spawn_depth_texture(
     ));
 }
 
-fn make_subdivided_quad(width: usize, height: usize) -> Mesh {
+fn make_subdivided_quad(width: usize, height: usize, add_normals: bool) -> Mesh {
     let mut positions = Vec::with_capacity(width * height);
     let mut normals = Vec::with_capacity(width * height);
     let mut uvs = Vec::with_capacity(width * height);
@@ -101,7 +101,9 @@ fn make_subdivided_quad(width: usize, height: usize) -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
     mesh.set_indices(Some(Indices::U32(indices)));
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    if add_normals {
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    }
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh
 }
@@ -242,7 +244,7 @@ fn spawn_custom_depth_texture(
         TextureUsages::COPY_DST | TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING;
     let coordinates_handle = images.add(coordinates_image);
 
-    let quad_handle = meshes.add(make_subdivided_quad(DEPTH_WIDTH, DEPTH_HEIGHT));
+    let quad_handle = meshes.add(make_subdivided_quad(DEPTH_WIDTH, DEPTH_HEIGHT, false));
 
     let material_handle = materials.add(CustomMaterial {
         texture: rgba_handle,
@@ -381,6 +383,7 @@ impl Material for CustomMaterial {
     }
     fn alpha_mode(&self) -> AlphaMode {
         AlphaMode::Blend
+        // AlphaMode::Mask(1.0)
     }
     fn specialize(
         pipeline: &bevy::pbr::MaterialPipeline<Self>,
@@ -388,6 +391,35 @@ impl Material for CustomMaterial {
         layout: &bevy_render::mesh::MeshVertexBufferLayout,
         key: bevy::pbr::MaterialPipelineKey<Self>,
     ) -> Result<(), bevy_render::render_resource::SpecializedMeshPipelineError> {
+        // descriptor.primitive.polygon_mode = PolygonMode::Line;
+        descriptor.primitive.cull_mode = None;
+        // descriptor.primitive.conservative = true;
+        if let Some(fragment) = descriptor.fragment.as_mut() {
+            // let format = fragment.targets[0].as_ref().unwrap().format;
+            // fragment.targets = vec![Some(ColorTargetState {
+            //     format,
+            //     blend: Some(BlendState::REPLACE),
+            //     write_mask: ColorWrites::ALL,
+            // })];
+            dbg!(&fragment.targets);
+        }
+        descriptor.depth_stencil = Some(render_resource::DepthStencilState {
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: render_resource::CompareFunction::Greater,
+            stencil: render_resource::StencilState {
+                front: render_resource::StencilFaceState::IGNORE,
+                back: render_resource::StencilFaceState::IGNORE,
+                read_mask: 0,
+                write_mask: 0,
+            },
+            bias: render_resource::DepthBiasState {
+                constant: 0,
+                slope_scale: 0.0,
+                clamp: 0.0,
+            },
+        });
+
         // let vertex = &mut descriptor.vertex;
         // vertex.shader_defs.push("VERTEX_POSITIONS".to_string());
         // vertex.shader_defs.push("VERTEX_NORMALS".to_string());
