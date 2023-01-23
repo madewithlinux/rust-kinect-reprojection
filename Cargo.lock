@@ -1615,15 +1615,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "egui-gizmo"
-version = "0.8.2"
-source = "git+https://github.com/matthiascy/egui-gizmo?rev=516dc8453bb6423d8cf050af172e854611a8a1d9#516dc8453bb6423d8cf050af172e854611a8a1d9"
-dependencies = [
- "egui",
- "glam",
-]
-
-[[package]]
 name = "egui_dock"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3688,7 +3679,6 @@ dependencies = [
  "bevy_render",
  "bytemuck",
  "egui",
- "egui-gizmo",
  "egui_dock",
  "image 0.24.5",
  "itertools",

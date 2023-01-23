@@ -7,11 +7,10 @@ use bevy_inspector_egui::bevy_inspector::hierarchy::{hierarchy_ui, SelectedEntit
 use bevy_inspector_egui::bevy_inspector::{self, ui_for_entities_shared_components};
 use bevy_inspector_egui::{reflect_inspector, DefaultInspectorConfigPlugin};
 use bevy_reflect::TypeRegistry;
-use bevy_render::camera::{CameraProjection, Viewport};
+use bevy_render::camera::Viewport;
 use bytemuck::checked::cast_slice;
 use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
-use egui_gizmo::GizmoMode;
 use image::{ImageBuffer, Luma};
 use kinect1::skeleton::SkeletonTrackingState;
 use smooth_bevy_cameras::controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin};
@@ -19,7 +18,7 @@ use smooth_bevy_cameras::LookTransformPlugin;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
 use crate::vr_connector::OpenVrPoseData;
-use crate::{COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH, MainCamera};
+use crate::{MainCamera, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH};
 
 pub struct AppUiDockPlugin;
 impl Plugin for AppUiDockPlugin {
@@ -34,7 +33,6 @@ impl Plugin for AppUiDockPlugin {
             .add_plugin(OrbitCameraPlugin::default())
             .add_startup_system(spawn_orbit_camera)
             .add_system(set_camera_viewport)
-            .add_system(set_gizmo_mode)
             .add_system(update_framebuffer_images)
             .register_type::<FrameBufferImageHandle>()
             .register_type::<Option<Handle<Image>>>()
@@ -74,18 +72,6 @@ fn set_camera_viewport(
     });
 }
 
-fn set_gizmo_mode(input: Res<Input<KeyCode>>, mut ui_state: ResMut<UiState>) {
-    for (key, mode) in [
-        (KeyCode::R, GizmoMode::Rotate),
-        (KeyCode::T, GizmoMode::Translate),
-        (KeyCode::S, GizmoMode::Scale),
-    ] {
-        if input.just_pressed(key) {
-            ui_state.gizmo_mode = mode;
-        }
-    }
-}
-
 #[derive(Eq, PartialEq)]
 enum InspectorSelection {
     Entities,
@@ -99,7 +85,6 @@ struct UiState {
     viewport_rect: egui::Rect,
     selected_entities: SelectedEntities,
     selection: InspectorSelection,
-    gizmo_mode: GizmoMode,
 }
 
 impl UiState {
@@ -142,7 +127,6 @@ impl UiState {
             selected_entities: SelectedEntities::default(),
             selection: InspectorSelection::Entities,
             viewport_rect: egui::Rect::NOTHING,
-            gizmo_mode: GizmoMode::Translate,
         }
     }
 
@@ -152,7 +136,6 @@ impl UiState {
             viewport_rect: &mut self.viewport_rect,
             selected_entities: &mut self.selected_entities,
             selection: &mut self.selection,
-            gizmo_mode: self.gizmo_mode,
         };
         egui_dock::DockArea::new(&mut self.tree).show(ctx, &mut tab_viewer);
     }
@@ -176,7 +159,6 @@ struct TabViewer<'a> {
     selected_entities: &'a mut SelectedEntities,
     selection: &'a mut InspectorSelection,
     viewport_rect: &'a mut egui::Rect,
-    gizmo_mode: GizmoMode,
 }
 
 impl egui_dock::TabViewer for TabViewer<'_> {
@@ -191,8 +173,6 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Window::WorldEntities => bevy_inspector::ui_for_world_entities(self.world, ui),
             Window::GameView => {
                 (*self.viewport_rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
-
-                // draw_gizmo(ui, self.world, self.selected_entities, self.gizmo_mode);
             }
             Window::Hierarchy => hierarchy_ui(self.world, ui, self.selected_entities),
             Window::Resources => select_resource(ui, &type_registry, self.selection),
@@ -220,7 +200,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                         get_or_create_frame_buffer_image_handle(world, frame_buffer_name, &mut egui_context)
                     },
                 );
-                let (width, height) = self.world.resource_scope::<Assets<Image>, _>(|world, images| {
+                let (width, height) = self.world.resource_scope::<Assets<Image>, _>(|_world, images| {
                     let image = images.get(&image_handle).unwrap();
                     let size = &image.texture_descriptor.size;
                     (size.width as f32, size.height as f32)
@@ -257,10 +237,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
 
     ui.vertical(|ui| {
         if ui.button("save color frame").clicked() {
-            let current_frame = world
-                .resource::<crate::receiver::KinectFrameBuffers>()
-                .frame_history[0]
-                .clone();
+            let current_frame = world.resource::<crate::receiver::KinectFrameBuffers>().frame_history[0].clone();
             pool.spawn(async move {
                 info!("saving color frame");
                 let Some(color_filename) = rfd::FileDialog::new()
@@ -284,10 +261,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
             .detach();
         }
         if ui.button("save depth frame").clicked() {
-            let current_frame = world
-                .resource::<crate::receiver::KinectFrameBuffers>()
-                .frame_history[0]
-                .clone();
+            let current_frame = world.resource::<crate::receiver::KinectFrameBuffers>().frame_history[0].clone();
             pool.spawn(async move {
                 info!("saving depth frame");
                 let Some(depth_filename) = rfd::FileDialog::new()
@@ -322,8 +296,6 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 }
                 let depth_timestamp = buffers.frame_history[0].depth_frame_info.timestamp;
 
-                let system_timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
-
                 ui.label("depth_timestamp");
                 reflect_inspector::ui_for_value_readonly(&depth_timestamp, ui, type_registry);
                 ui.end_row();
@@ -337,8 +309,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 );
                 ui.end_row();
 
-                ui.label("system_timestamp");
-                // let millis = system_timestamp.as_millis() as i64;
+                ui.label("performance_counter");
                 let millis = unsafe {
                     let mut counter = 0;
                     windows::Win32::System::Performance::QueryPerformanceCounter(&mut counter)
@@ -350,7 +321,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 };
                 reflect_inspector::ui_for_value_readonly(&millis, ui, type_registry);
                 ui.end_row();
-                ui.label("system_timestamp diff");
+                ui.label("performance_counter diff");
                 reflect_inspector::ui_for_value_readonly(&(millis - depth_timestamp), ui, type_registry);
                 ui.end_row();
             });
@@ -500,37 +471,6 @@ fn get_or_create_frame_buffer_image_handle(
     }
 }
 
-// TODO: remove all the gizmo stuff from here?
-fn draw_gizmo(ui: &mut egui::Ui, world: &mut World, selected_entities: &SelectedEntities, gizmo_mode: GizmoMode) {
-    let (cam_transform, projection) = world
-        .query_filtered::<(&GlobalTransform, &Projection), With<MainCamera>>()
-        .single(world);
-    let view_matrix = Mat4::from(cam_transform.affine().inverse());
-    let projection_matrix = projection.get_projection_matrix();
-
-    if selected_entities.len() != 1 {
-        return;
-    }
-
-    for selected in selected_entities.iter() {
-        let Some(transform) = world.get::<Transform>(selected)
-            else { continue };
-        let model_matrix = transform.compute_matrix();
-
-        let Some(result) = egui_gizmo::Gizmo::new(selected)
-                    .model_matrix(model_matrix.to_cols_array_2d())
-                    .view_matrix(view_matrix.to_cols_array_2d())
-                    .projection_matrix(projection_matrix.to_cols_array_2d())
-                    .orientation(egui_gizmo::GizmoOrientation::Local)
-                    .mode(gizmo_mode)
-                    .interact(ui)
-                else { continue };
-
-        let mut transform = world.get_mut::<Transform>(selected).unwrap();
-        *transform = Transform::from_matrix(Mat4::from_cols_array_2d(&result.transform));
-    }
-}
-
 fn select_resource(ui: &mut egui::Ui, type_registry: &TypeRegistry, selection: &mut InspectorSelection) {
     let mut resources: Vec<_> = type_registry
         .iter()
@@ -584,9 +524,9 @@ fn select_asset(ui: &mut egui::Ui, type_registry: &TypeRegistry, world: &World, 
     }
 }
 
-fn spawn_2d_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default()).insert(MainCamera);
-}
+// fn spawn_2d_camera(mut commands: Commands) {
+//     commands.spawn(Camera2dBundle::default()).insert(MainCamera);
+// }
 
 fn spawn_orbit_camera(mut commands: Commands) {
     commands
