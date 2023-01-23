@@ -3,7 +3,10 @@ use bevy_reflect::TypeUuid;
 use bevy_render::{
     mesh::{Indices, VertexAttributeValues},
     primitives::Aabb,
-    render_resource::{AsBindGroup, PrimitiveTopology, ShaderRef, TextureUsages, self, TextureFormat, ColorWrites, BlendState, ColorTargetState, PolygonMode},
+    render_resource::{
+        self, AsBindGroup, BlendState, ColorTargetState, ColorWrites, PolygonMode, PrimitiveTopology, ShaderRef,
+        TextureFormat, TextureUsages,
+    },
 };
 use bytemuck::checked::{cast_slice, cast_slice_mut};
 use itertools::Itertools;
@@ -230,7 +233,7 @@ fn spawn_custom_depth_texture(
         &[0, 0, 0, 255],
         bevy_render::render_resource::TextureFormat::Rgba8UnormSrgb,
     ));
-    let mut coordinates_image = Image::new_fill(
+    let coordinates_handle = images.add(Image::new_fill(
         bevy_render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
             height: COLOR_HEIGHT as u32,
@@ -239,16 +242,27 @@ fn spawn_custom_depth_texture(
         bevy::render::render_resource::TextureDimension::D2,
         cast_slice(&[0.0, 0.0, 0.0, 0.0]),
         bevy_render::render_resource::TextureFormat::Rgba32Float,
-    );
-    coordinates_image.texture_descriptor.usage =
-        TextureUsages::COPY_DST | TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING;
-    let coordinates_handle = images.add(coordinates_image);
+    ));
+    let player_index_handle = images.add(Image::new_fill(
+        bevy_render::render_resource::Extent3d {
+            width: COLOR_WIDTH as u32,
+            height: COLOR_HEIGHT as u32,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        &[0],
+        bevy_render::render_resource::TextureFormat::R8Unorm,
+    ));
 
     let quad_handle = meshes.add(make_subdivided_quad(DEPTH_WIDTH, DEPTH_HEIGHT, false));
 
     let material_handle = materials.add(CustomMaterial {
         texture: rgba_handle,
         coordinates: coordinates_handle,
+        player_index: player_index_handle,
+        max_adj_dist: 0.1,
+        point_transform_matrix: Mat4::IDENTITY,
+        use_player_index_mask: 0,
     });
 
     commands.spawn((
@@ -267,7 +281,8 @@ fn spawn_custom_depth_texture(
 
 fn update_custom_depth_texture(
     buffers: Res<KinectFrameBuffers>,
-    mut depth_texture: Query<(&DepthTextureMarker, &Handle<Mesh>, &Handle<CustomMaterial>, &mut Aabb)>,
+    // mut depth_texture: Query<(&DepthTextureMarker, &Handle<Mesh>, &Handle<CustomMaterial>, &mut Aabb)>,
+    mut depth_texture: Query<(&DepthTextureMarker, &Handle<CustomMaterial>)>,
     mut materials: ResMut<Assets<CustomMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut images: ResMut<Assets<Image>>,
@@ -295,7 +310,7 @@ fn update_custom_depth_texture(
         depths.clone()
     };
 
-    let (_marker, mesh_handle, material_handle, mut aabb) = depth_texture.single_mut();
+    let (_marker, material_handle) = depth_texture.single_mut();
     let Some(material) = materials.get_mut(&material_handle) else {
         info!("material not found");
         return;
@@ -315,49 +330,30 @@ fn update_custom_depth_texture(
     if let Some(coordinates) = images.get_mut(coordinates_handle) {
         let coordinates_data = cast_slice_mut::<_, [f32; 4]>(&mut coordinates.data);
         for (flat_index, &sk_point) in skeleton_points.iter().enumerate() {
-            if sk_point == Vec3::ZERO {
-                // coordinates_data[flat_index] = depth_transformer
-                //     .index_depth_to_world(flat_index, 4_000)
-                //     .extend(0.0)
-                //     .to_array();
-                coordinates_data[flat_index] = Vec4::ZERO.to_array();
+            coordinates_data[flat_index] = if sk_point == Vec3::ZERO {
+                // sk_point.extend(0.0).to_array()
+                Vec4::ZERO.to_array()
             } else {
-                coordinates_data[flat_index] = depth_transformer
-                    .skeleton_point_to_world(sk_point)
-                    .extend(1.0)
-                    .to_array();
-            }
+                sk_point.extend(1.0).to_array()
+            };
+            // if sk_point == Vec3::ZERO {
+            //     // coordinates_data[flat_index] = depth_transformer
+            //     //     .index_depth_to_world(flat_index, 4_000)
+            //     //     .extend(0.0)
+            //     //     .to_array();
+            //     coordinates_data[flat_index] = Vec4::ZERO.to_array();
+            // } else {
+            //     coordinates_data[flat_index] = depth_transformer
+            //         .skeleton_point_to_world(sk_point)
+            //         .extend(1.0)
+            //         .to_array();
+            // }
         }
     } else {
         info!("coordinates not found");
     }
 
-    // let Some(mesh) = meshes.get_mut(&mesh_handle) else {
-    //     info!("mesh not found");
-    //     return;
-    // };
-    // let Some(Indices::U32(indices)) = mesh.indices().map(|indices| indices.clone()) else {
-    //     info!("mesh has bad indices");
-    //     return;
-    // };
-
-    // let Some(VertexAttributeValues::Float32x3(positions)) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION) else {
-    //     info!("position attribute missing from mesh");
-    //     return;
-    // };
-    // for (flat_index, &sk_point) in skeleton_points.iter().enumerate() {
-    //     if sk_point == Vec3::ZERO {
-    //         positions[flat_index] = depth_transformer.index_depth_to_world(flat_index, 4_000).to_array();
-    //         // positions[flat_index] = Vec3::ZERO.to_array();
-    //     } else {
-    //         positions[flat_index] = depth_transformer.skeleton_point_to_world(sk_point).to_array();
-    //     }
-    // }
-
-    // // recomputing aabb fixes the issue where it disappeared when zoomed in
-    // if let Some(new_aabb) = mesh.compute_aabb() {
-    //     *aabb = new_aabb;
-    // }
+    material.point_transform_matrix = depth_transformer.point_transform_matrix.into();
 }
 
 #[derive(AsBindGroup, Debug, Clone, TypeUuid)]
@@ -367,11 +363,17 @@ pub struct CustomMaterial {
     #[sampler(1)]
     texture: Handle<Image>,
 
-    // #[texture(2)]
-    // #[sampler(3)]
     #[texture(2, visibility(all))]
-    // #[sampler(3, visibility(all))]
     coordinates: Handle<Image>,
+    #[texture(3, visibility(all))]
+    player_index: Handle<Image>,
+
+    #[uniform(4)]
+    max_adj_dist: f32,
+    #[uniform(5)]
+    point_transform_matrix: Mat4,
+    #[uniform(6)]
+    use_player_index_mask: u32,
 }
 
 impl Material for CustomMaterial {
@@ -393,16 +395,8 @@ impl Material for CustomMaterial {
     ) -> Result<(), bevy_render::render_resource::SpecializedMeshPipelineError> {
         // descriptor.primitive.polygon_mode = PolygonMode::Line;
         descriptor.primitive.cull_mode = None;
+        // descriptor.primitive.unclipped_depth = true;
         // descriptor.primitive.conservative = true;
-        if let Some(fragment) = descriptor.fragment.as_mut() {
-            // let format = fragment.targets[0].as_ref().unwrap().format;
-            // fragment.targets = vec![Some(ColorTargetState {
-            //     format,
-            //     blend: Some(BlendState::REPLACE),
-            //     write_mask: ColorWrites::ALL,
-            // })];
-            dbg!(&fragment.targets);
-        }
         descriptor.depth_stencil = Some(render_resource::DepthStencilState {
             format: TextureFormat::Depth32Float,
             depth_write_enabled: true,
@@ -419,16 +413,6 @@ impl Material for CustomMaterial {
                 clamp: 0.0,
             },
         });
-
-        // let vertex = &mut descriptor.vertex;
-        // vertex.shader_defs.push("VERTEX_POSITIONS".to_string());
-        // vertex.shader_defs.push("VERTEX_NORMALS".to_string());
-        // vertex.shader_defs.push("VERTEX_UVS".to_string());
-
-        // let fragment = descriptor.fragment.as_mut().unwrap();
-        // fragment.shader_defs.push("VERTEX_POSITIONS".to_string());
-        // fragment.shader_defs.push("VERTEX_NORMALS".to_string());
-        // fragment.shader_defs.push("VERTEX_UVS".to_string());
 
         Ok(())
     }

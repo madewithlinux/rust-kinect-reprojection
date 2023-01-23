@@ -29,7 +29,7 @@ pub struct KinectDepthTransformer {
     pub kinect_position: Vec3,
     pub kinect_rot_deg: Vec3,
     pub kinect_scale: Vec3,
-    point_transform_matrix: Affine3A,
+    pub point_transform_matrix: Affine3A,
     point_transform_matrix_inverse: Affine3A,
     pub point_cloud_skel: bool,
 }

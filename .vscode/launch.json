@@ -1,0 +1,139 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'rust-kinect-reprojection-app'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=rust-kinect-reprojection-app",
+                    "--package=rust-kinect-reprojection-app"
+                ],
+                "filter": {
+                    "name": "rust-kinect-reprojection-app",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'rust-kinect-reprojection-app'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=rust-kinect-reprojection-app",
+                    "--package=rust-kinect-reprojection-app"
+                ],
+                "filter": {
+                    "name": "rust-kinect-reprojection-app",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'kinect1'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=kinect1"
+                ],
+                "filter": {
+                    "name": "kinect1",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'kinect1-sys'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=kinect1-sys"
+                ],
+                "filter": {
+                    "name": "kinect1-sys",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'rust-kinect-reprojection-app-bevy'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=rust-kinect-reprojection-app-bevy"
+                ],
+                "filter": {
+                    "name": "rust-kinect-reprojection-app-bevy",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'rust-kinect-reprojection-app-bevy'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=rust-kinect-reprojection-app-bevy",
+                    "--package=rust-kinect-reprojection-app-bevy"
+                ],
+                "filter": {
+                    "name": "rust-kinect-reprojection-app-bevy",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'rust-kinect-reprojection-app-bevy'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=rust-kinect-reprojection-app-bevy",
+                    "--package=rust-kinect-reprojection-app-bevy"
+                ],
+                "filter": {
+                    "name": "rust-kinect-reprojection-app-bevy",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
