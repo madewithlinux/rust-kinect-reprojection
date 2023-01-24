@@ -12,7 +12,7 @@ var texture_sampler: sampler;
 @group(1) @binding(2)
 var coordinates: texture_2d<f32>;
 @group(1) @binding(3)
-var player_index: texture_2d<f32>;
+var player_index: texture_2d<u32>;
 
 @group(1) @binding(4)
 var<uniform> max_adj_dist: f32;
@@ -24,7 +24,7 @@ var<uniform> use_player_index_mask: u32;
 
 let WIDTH: f32 = 640.0;
 let HEIGHT: f32 = 480.0;
-// note: this is in meters!
+// NOTE: this is in meters! (and also note that the kinect depth sensor has a lot of noise lol)
 let MAX_TRIANGLE_MAX_SIDE_LEN: f32 = 0.3;
 
 fn is_coordinate_valid(coordinate: vec4<f32>) -> bool {
@@ -66,9 +66,8 @@ fn vertex(@builtin(vertex_index) vertex_index: u32, vertex: Vertex) -> VertexOut
     var model = mesh.model;
 
     out.blend_color = textureLoad(texture, vertex.vertex_pixel_coord, 0);
-    let world_position = point_transform_matrix * textureLoad(coordinates, vertex.vertex_pixel_coord, 0);
-    out.clip_position = mesh_position_world_to_clip(world_position);
-    out.uv = vertex.uv;
+    let vertex_player_index = textureLoad(player_index, vertex.vertex_pixel_coord, 0);
+    let kinect_position = textureLoad(coordinates, vertex.vertex_pixel_coord, 0);
 
     let c0 = textureLoad(coordinates, vertex.pixel_coord_0, 0);
     let c1 = textureLoad(coordinates, vertex.pixel_coord_1, 0);
@@ -77,13 +76,20 @@ fn vertex(@builtin(vertex_index) vertex_index: u32, vertex: Vertex) -> VertexOut
     let pi1 = textureLoad(player_index, vertex.pixel_coord_1, 0);
     let pi2 = textureLoad(player_index, vertex.pixel_coord_2, 0);
 
+
+    let world_position = point_transform_matrix * kinect_position;
+    out.clip_position = mesh_position_world_to_clip(world_position);
+    out.uv = vertex.uv;
+
     let triangle_valid = is_triangle_valid(c0, c1, c2);
     let triangle_max_side_len = find_triangle_max_side_len(c0, c1, c2);
     var is_valid = true;
     is_valid = is_valid && triangle_valid;
     is_valid = is_valid && triangle_max_side_len < MAX_TRIANGLE_MAX_SIDE_LEN;
     if use_player_index_mask > 0u {
-        is_valid = is_valid && is_triangle_valid(pi0, pi1, pi2);
+        is_valid = is_valid && (pi0.x > 0u);
+        is_valid = is_valid && (pi1.x > 0u);
+        is_valid = is_valid && (pi2.x > 0u);
     }
     if is_valid {
         out.is_valid = 1.0;

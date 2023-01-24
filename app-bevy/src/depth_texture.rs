@@ -252,7 +252,7 @@ fn spawn_custom_depth_texture(
         },
         bevy::render::render_resource::TextureDimension::D2,
         &[0],
-        bevy_render::render_resource::TextureFormat::R8Unorm,
+        bevy_render::render_resource::TextureFormat::R8Uint,
     ));
 
     let quad_handle = meshes.add(make_subdivided_quad_with_pixel_coords(DEPTH_WIDTH, DEPTH_HEIGHT));
@@ -276,40 +276,24 @@ fn spawn_custom_depth_texture(
             transform: Transform::from_xyz(0.0, 0.0, 0.0),
             ..Default::default()
         },
+        // just make it really big so it always renders
         Aabb::from_min_max(Vec3::splat(-4.0), Vec3::splat(4.0)),
     ));
 }
 
 fn update_custom_depth_texture(
     buffers: Res<KinectFrameBuffers>,
-    // mut depth_texture: Query<(&DepthTextureMarker, &Handle<Mesh>, &Handle<CustomMaterial>, &mut Aabb)>,
     mut depth_texture: Query<(&DepthTextureMarker, &Handle<CustomMaterial>)>,
     mut materials: ResMut<Assets<CustomMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut images: ResMut<Assets<Image>>,
     depth_transformer: Res<KinectDepthTransformer>,
 ) {
     if !buffers.is_changed() {
         return;
     }
-    // if buffers.derived_frame.depth.len() == 0 {
-    //     info!("depth frame empty");
-    //     return;
-    // }
     let rgba = &buffers.rgba;
     let skeleton_points = &buffers.skeleton_points;
-    let depths = &buffers.depth;
     let player_indexes = &buffers.player_index;
-    // TODO: refactor and put this somewhere else
-    let depths = if player_indexes.iter().any(|player_index| *player_index > 0) {
-        depths
-            .iter()
-            .zip(player_indexes.iter())
-            .map(|(depth, player_index)| if *player_index > 0 { *depth } else { 0 })
-            .collect_vec()
-    } else {
-        depths.clone()
-    };
 
     let (_marker, material_handle) = depth_texture.single_mut();
     let Some(material) = materials.get_mut(&material_handle) else {
@@ -318,10 +302,9 @@ fn update_custom_depth_texture(
     };
     let image_handle = &material.texture;
     if let Some(image) = images.get_mut(image_handle) {
-        // get_buffer(&FrameBufferDescriptor::CurrentColor, &buffers, &mut image.data);
         let image_data = cast_slice_mut::<_, [u8; 4]>(&mut image.data);
-        for (flat_index, (&rgba, &depth)) in rgba.iter().zip(depths.iter()).enumerate() {
-            image_data[flat_index] = if depth == 0 { [0, 0, 0, 0] } else { rgba };
+        for (flat_index, &rgba) in rgba.iter().enumerate() {
+            image_data[flat_index] = rgba;
         }
     } else {
         info!("image not found");
@@ -332,27 +315,31 @@ fn update_custom_depth_texture(
         let coordinates_data = cast_slice_mut::<_, [f32; 4]>(&mut coordinates.data);
         for (flat_index, &sk_point) in skeleton_points.iter().enumerate() {
             coordinates_data[flat_index] = if sk_point == Vec3::ZERO {
-                // sk_point.extend(0.0).to_array()
                 Vec4::ZERO.to_array()
             } else {
                 sk_point.extend(1.0).to_array()
             };
-            // if sk_point == Vec3::ZERO {
-            //     // coordinates_data[flat_index] = depth_transformer
-            //     //     .index_depth_to_world(flat_index, 4_000)
-            //     //     .extend(0.0)
-            //     //     .to_array();
-            //     coordinates_data[flat_index] = Vec4::ZERO.to_array();
-            // } else {
-            //     coordinates_data[flat_index] = depth_transformer
-            //         .skeleton_point_to_world(sk_point)
-            //         .extend(1.0)
-            //         .to_array();
-            // }
         }
     } else {
         info!("coordinates not found");
     }
+
+    let player_index_handle = &material.player_index;
+    if let Some(player_index) = images.get_mut(player_index_handle) {
+        let player_index_data = &mut player_index.data;
+        for (flat_index, &player_index) in player_indexes.iter().enumerate() {
+            player_index_data[flat_index] = player_index;
+        }
+    } else {
+        info!("player_index not found");
+    }
+
+    // if there's any player index detected, then tell the shader to use the player index
+    material.use_player_index_mask = if player_indexes.iter().any(|player_index| *player_index > 0) {
+        1
+    } else {
+        0
+    };
 
     material.point_transform_matrix = depth_transformer.point_transform_matrix.into();
 }
@@ -366,7 +353,7 @@ pub struct CustomMaterial {
 
     #[texture(2, visibility(all))]
     coordinates: Handle<Image>,
-    #[texture(3, visibility(all))]
+    #[texture(3, visibility(all), sample_type = "u_int")]
     player_index: Handle<Image>,
 
     #[uniform(4)]
