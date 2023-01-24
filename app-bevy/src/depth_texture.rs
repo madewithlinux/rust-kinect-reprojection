@@ -276,7 +276,7 @@ fn spawn_custom_depth_texture(
             transform: Transform::from_xyz(0.0, 0.0, 0.0),
             ..Default::default()
         },
-        Aabb::default(),
+        Aabb::from_min_max(Vec3::splat(-4.0), Vec3::splat(4.0)),
     ));
 }
 
