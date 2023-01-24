@@ -29,6 +29,7 @@ pub struct AppSettings {
     pub show_debug_entities: bool,
     pub show_debug_skeleton: bool,
     pub show_debug_coordinate_matchup: bool,
+    pub kinect_static_frame: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -44,6 +45,7 @@ impl Default for AppSettings {
             show_debug_entities: true,
             show_debug_skeleton: true,
             show_debug_coordinate_matchup: true,
+            kinect_static_frame: None,
         }
     }
 }
@@ -75,6 +77,9 @@ impl Plugin for AppSettingsPlugin {
 
 pub fn kinect_enabled(settings: Res<AppSettings>) -> bool {
     settings.kinect_enabled
+}
+pub fn use_kinect_static_frame(settings: Res<AppSettings>) -> bool {
+    settings.kinect_static_frame.is_some()
 }
 pub fn vr_input_enabled(settings: Res<AppSettings>) -> bool {
     settings.vr_input_enabled

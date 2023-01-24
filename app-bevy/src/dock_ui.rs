@@ -17,6 +17,7 @@ use smooth_bevy_cameras::controllers::orbit::{OrbitCameraBundle, OrbitCameraCont
 use smooth_bevy_cameras::LookTransformPlugin;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
+use crate::receiver::save_framebuffers_to_file;
 use crate::vr_connector::OpenVrPoseData;
 use crate::{MainCamera, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH};
 
@@ -280,6 +281,23 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 .unwrap();
                 depth_frame.save(&depth_filename).unwrap();
                 info!("saved {:?}", &depth_filename);
+            })
+            .detach();
+        }
+        if ui.button("save framebuffers").clicked() {
+            let buffers = world.resource::<crate::receiver::KinectFrameBuffers>().clone();
+            pool.spawn(async move {
+                info!("saving framebuffers");
+                let Some(file_path) = rfd::FileDialog::new()
+                    .add_filter("json", &["json"])
+                    .set_title("save framebuffers")
+                    .set_file_name("kinect_framebuffers.json")
+                    .save_file() else {
+                        info!("file chooser cancelled");
+                        return
+                    };
+                save_framebuffers_to_file(&buffers, &file_path);
+                info!("saved {:?}", &file_path);
             })
             .detach();
         }

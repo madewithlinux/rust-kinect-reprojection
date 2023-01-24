@@ -1,8 +1,10 @@
 use std::f32::consts::PI;
+use std::io::{Read, Write};
 
 use bevy::{math::Affine3A, prelude::*};
 use iyes_loopless::prelude::*;
 
+use serde::{Deserialize, Serialize};
 use tracing::{info, span};
 use tracing::{instrument, Level};
 
@@ -11,6 +13,8 @@ use kinect1::{
     worker_v2::{start_frame_thread2, FrameMessage, FrameMessageReceiver},
 };
 
+use crate::app_settings::use_kinect_static_frame;
+use crate::delay_buffer::query_performance_counter_ms;
 use crate::{
     app_settings::{kinect_enabled, AppSettings},
     delay_buffer::DelayBuffer,
@@ -114,7 +118,7 @@ impl KinectDepthTransformer {
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct KinectFrameBuffers {
     // viewable buffers
     pub rgba: Vec<[u8; 4]>,
@@ -122,8 +126,10 @@ pub struct KinectFrameBuffers {
     pub depth: Vec<u16>,
     pub player_index: Vec<u8>,
     pub skeleton_points: Vec<Vec3>,
+    #[serde(skip)]
     pub skeleton_frame: SkeletonFrame,
     // non-viewable data
+    #[serde(skip)]
     pub frame_history: std::collections::VecDeque<FrameMessage>,
 }
 
@@ -203,14 +209,66 @@ fn setup_kinect_receiver(world: &mut World) {
     world.insert_non_send_resource(KinectReceiver(receiver, Default::default()));
 }
 
+pub fn save_framebuffers_to_file(buffers: &KinectFrameBuffers, file_path: impl AsRef<std::path::Path>) {
+    let s = serde_json::to_string(buffers).unwrap();
+    std::fs::File::create(file_path)
+        .unwrap()
+        .write_all(s.as_bytes())
+        .unwrap();
+}
+
+fn static_frame_system(
+    mut buffers: ResMut<KinectFrameBuffers>,
+    settings: Res<AppSettings>,
+    mut static_frame: Local<Option<KinectFrameBuffers>>,
+    mut last_update_ms: Local<i64>,
+) {
+    let Some(static_frame_path) = &settings.kinect_static_frame else {
+        return;
+    };
+    if static_frame.is_none() {
+        info!("reading framebuffers from {:?}", static_frame_path);
+        let mut s = String::new();
+        std::fs::File::open(&static_frame_path)
+            .unwrap()
+            .read_to_string(&mut s)
+            .unwrap();
+        *static_frame = Some(serde_json::from_str(&s).unwrap());
+
+        info!("finished reading framebuffers from {:?}", static_frame_path);
+    }
+    let Some(static_frame) = &*static_frame else {
+        return;
+    };
+    let current_ms = query_performance_counter_ms();
+    let target_update_delay = (30.0 / 1000.0) as i64;
+    if current_ms > *last_update_ms + target_update_delay {
+        *buffers = static_frame.clone();
+        *last_update_ms = current_ms;
+    }
+}
+
 pub struct KinectReceiverPlugin;
 impl Plugin for KinectReceiverPlugin {
     fn build(&self, app: &mut App) {
         app //
             .insert_resource(KinectDepthTransformer::new())
             .insert_resource(KinectFrameBuffers::default())
-            .add_startup_system(setup_kinect_receiver.run_if(kinect_enabled))
-            .add_system(receive_kinect_current_frame.run_if(kinect_enabled))
+            .add_startup_system(
+                setup_kinect_receiver
+                    .run_if(kinect_enabled)
+                    .run_if_not(use_kinect_static_frame),
+            )
+            .add_system(
+                receive_kinect_current_frame
+                    .run_if(kinect_enabled)
+                    .run_if_not(use_kinect_static_frame),
+            )
+            .add_system(
+                static_frame_system
+                    .run_if(kinect_enabled)
+                    .run_if(use_kinect_static_frame),
+            )
             .add_system(update_depth_transformer.run_if(kinect_enabled))
             .register_type::<KinectDepthTransformer>();
     }
