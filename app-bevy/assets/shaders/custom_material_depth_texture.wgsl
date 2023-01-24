@@ -24,95 +24,81 @@ var<uniform> use_player_index_mask: u32;
 
 let WIDTH: f32 = 640.0;
 let HEIGHT: f32 = 480.0;
+// note: this is in meters!
+let MAX_TRIANGLE_MAX_SIDE_LEN: f32 = 0.3;
 
 fn is_coordinate_valid(coordinate: vec4<f32>) -> bool {
     return coordinate.x != 0.0 || coordinate.y != 0.0 || coordinate.z != 0.0 || coordinate.w != 0.0;
 }
 
-fn is_pixel_coords_valid(pixel_coords: vec2<f32>) -> bool {
-    let px = pixel_coords.x;
-    let py = pixel_coords.y;
-    let px0 = i32(floor(px));
-    let py0 = i32(floor(py));
-    let px1 = i32(ceil(px));
-    let py1 = i32(ceil(py));
-    let p0 = vec2<i32>(px0, py0);
-    let p1 = vec2<i32>(px1, py0);
-    let p2 = vec2<i32>(px1, py1);
-    let p3 = vec2<i32>(px0, py1);
-    var c0 = textureLoad(coordinates, p0, 0);
-    var c1 = textureLoad(coordinates, p1, 0);
-    var c2 = textureLoad(coordinates, p2, 0);
-    var c3 = textureLoad(coordinates, p3, 0);
-    return is_coordinate_valid(c0) && is_coordinate_valid(c1) && is_coordinate_valid(c2) && is_coordinate_valid(c3);
+fn is_triangle_valid(c0: vec4<f32>, c1: vec4<f32>, c2: vec4<f32>) -> bool {
+    return is_coordinate_valid(c0) && is_coordinate_valid(c1) && is_coordinate_valid(c2);
 }
 
-fn max_adjacent_dist(pixel_coords: vec2<f32>) -> f32 {
-    let px = pixel_coords.x;
-    let py = pixel_coords.y;
-    let px0 = i32(floor(px));
-    let py0 = i32(floor(py));
-    let px1 = i32(ceil(px));
-    let py1 = i32(ceil(py));
-    let p0 = vec2<i32>(px0, py0);
-    let p1 = vec2<i32>(px1, py0);
-    let p2 = vec2<i32>(px1, py1);
-    let p3 = vec2<i32>(px0, py1);
-    let c0 = textureLoad(coordinates, p0, 0);
-    let c1 = textureLoad(coordinates, p1, 0);
-    let c2 = textureLoad(coordinates, p2, 0);
-    let c3 = textureLoad(coordinates, p3, 0);
-
+fn find_triangle_max_side_len(c0: vec4<f32>, c1: vec4<f32>, c2: vec4<f32>) -> f32 {
     var dist = 0.0;
-    dist = max(dist, distance(c0, c1));
-    dist = max(dist, distance(c0, c2));
-    dist = max(dist, distance(c0, c3));
-    dist = max(dist, distance(c1, c2));
-    dist = max(dist, distance(c1, c3));
-    dist = max(dist, distance(c2, c3));
+    dist = max(dist, distance(c0.xyz, c1.xyz));
+    dist = max(dist, distance(c0.xyz, c2.xyz));
+    dist = max(dist, distance(c1.xyz, c2.xyz));
     return dist;
 }
 
 struct Vertex {
     @location(0) position: vec3<f32>,
-    // @location(1) normal: vec3<f32>,
-    @location(2) uv: vec2<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) vertex_pixel_coord: vec2<i32>,
+    @location(3) pixel_coord_0: vec2<i32>,
+    @location(4) pixel_coord_1: vec2<i32>,
+    @location(5) pixel_coord_2: vec2<i32>,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) world_position: vec4<f32>,
-    @location(1) uv: vec2<f32>,
-    @location(2) pixel_coords: vec2<f32>,
-    // #import bevy_pbr::mesh_vertex_output
+    @location(0) blend_color: vec4<f32>,
+    @location(1) is_valid: f32,
+    @location(2) uv: vec2<f32>,
 };
 
 
 @vertex
-fn vertex(vertex: Vertex) -> VertexOutput {
+fn vertex(@builtin(vertex_index) vertex_index: u32, vertex: Vertex) -> VertexOutput {
     var out: VertexOutput;
     var model = mesh.model;
 
-    out.pixel_coords = round(vertex.uv * vec2<f32>(WIDTH, HEIGHT));
-    out.world_position = point_transform_matrix * textureLoad(coordinates, vec2<i32>(out.pixel_coords), 0);
-    out.clip_position = mesh_position_world_to_clip(out.world_position);
+    out.blend_color = textureLoad(texture, vertex.vertex_pixel_coord, 0);
+    let world_position = point_transform_matrix * textureLoad(coordinates, vertex.vertex_pixel_coord, 0);
+    out.clip_position = mesh_position_world_to_clip(world_position);
     out.uv = vertex.uv;
+
+    let c0 = textureLoad(coordinates, vertex.pixel_coord_0, 0);
+    let c1 = textureLoad(coordinates, vertex.pixel_coord_1, 0);
+    let c2 = textureLoad(coordinates, vertex.pixel_coord_2, 0);
+    let pi0 = textureLoad(player_index, vertex.pixel_coord_0, 0);
+    let pi1 = textureLoad(player_index, vertex.pixel_coord_1, 0);
+    let pi2 = textureLoad(player_index, vertex.pixel_coord_2, 0);
+
+    let triangle_valid = is_triangle_valid(c0, c1, c2);
+    let triangle_max_side_len = find_triangle_max_side_len(c0, c1, c2);
+    var is_valid = true;
+    is_valid = is_valid && triangle_valid;
+    is_valid = is_valid && triangle_max_side_len < MAX_TRIANGLE_MAX_SIDE_LEN;
+    if use_player_index_mask > 0u {
+        is_valid = is_valid && is_triangle_valid(pi0, pi1, pi2);
+    }
+    if is_valid {
+        out.is_valid = 1.0;
+    } else {
+        out.is_valid = 0.0;
+    }
     return out;
 }
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    let color = textureSample(texture, texture_sampler, in.uv);
-
-    let valid = is_pixel_coords_valid(in.pixel_coords);
-    let adj_dist = max_adjacent_dist(in.pixel_coords);
-
-    if !valid {
+    // let color = textureSample(texture, texture_sampler, in.uv);
+    let color = in.blend_color;
+    if in.is_valid < 0.5 {
         discard;
     }
-    if adj_dist > 0.1 {
-        discard;
-    }
-
     return color;
 }

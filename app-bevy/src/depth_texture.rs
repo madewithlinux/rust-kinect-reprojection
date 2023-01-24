@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 use bevy_reflect::TypeUuid;
 use bevy_render::{
-    mesh::{Indices, VertexAttributeValues},
+    mesh::{Indices, MeshVertexAttribute, VertexAttributeValues},
     primitives::Aabb,
     render_resource::{
         self, AsBindGroup, BlendState, ColorTargetState, ColorWrites, PolygonMode, PrimitiveTopology, ShaderRef,
-        TextureFormat, TextureUsages,
+        TextureFormat, TextureUsages, VertexFormat,
     },
 };
 use bytemuck::checked::{cast_slice, cast_slice_mut};
@@ -24,7 +24,8 @@ impl Plugin for DepthTexturePlugin {
             // .add_startup_system(spawn_depth_texture)
             // .add_system(update_depth_texture);
             .add_startup_system(spawn_custom_depth_texture)
-            .add_system(update_custom_depth_texture);
+            .add_system(update_custom_depth_texture)
+            .register_type::<CustomMaterial>();
     }
 }
 
@@ -254,7 +255,7 @@ fn spawn_custom_depth_texture(
         bevy_render::render_resource::TextureFormat::R8Unorm,
     ));
 
-    let quad_handle = meshes.add(make_subdivided_quad(DEPTH_WIDTH, DEPTH_HEIGHT, false));
+    let quad_handle = meshes.add(make_subdivided_quad_with_pixel_coords(DEPTH_WIDTH, DEPTH_HEIGHT));
 
     let material_handle = materials.add(CustomMaterial {
         texture: rgba_handle,
@@ -356,7 +357,7 @@ fn update_custom_depth_texture(
     material.point_transform_matrix = depth_transformer.point_transform_matrix.into();
 }
 
-#[derive(AsBindGroup, Debug, Clone, TypeUuid)]
+#[derive(AsBindGroup, Debug, Clone, TypeUuid, Reflect)]
 #[uuid = "b62bb455-a72c-4b56-87bb-81e0554e234f"]
 pub struct CustomMaterial {
     #[texture(0)]
@@ -414,6 +415,67 @@ impl Material for CustomMaterial {
             },
         });
 
+        let vertex_layout = layout.get_layout(&[
+            Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
+            Mesh::ATTRIBUTE_UV_0.at_shader_location(1),
+            ATTRIBUTE_VERTEX_PIXEL_COORD.at_shader_location(2),
+            ATTRIBUTE_PIXEL_COORD_0.at_shader_location(3),
+            ATTRIBUTE_PIXEL_COORD_1.at_shader_location(4),
+            ATTRIBUTE_PIXEL_COORD_2.at_shader_location(5),
+        ])?;
+        descriptor.vertex.buffers = vec![vertex_layout];
+
         Ok(())
     }
+}
+
+const ATTRIBUTE_VERTEX_PIXEL_COORD: MeshVertexAttribute =
+    MeshVertexAttribute::new("vertex_pixel_coord", 988540923, VertexFormat::Sint32x2);
+const ATTRIBUTE_PIXEL_COORD_0: MeshVertexAttribute =
+    MeshVertexAttribute::new("pixel_coord_0", 988540920, VertexFormat::Sint32x2);
+const ATTRIBUTE_PIXEL_COORD_1: MeshVertexAttribute =
+    MeshVertexAttribute::new("pixel_coord_1", 988540921, VertexFormat::Sint32x2);
+const ATTRIBUTE_PIXEL_COORD_2: MeshVertexAttribute =
+    MeshVertexAttribute::new("pixel_coord_2", 988540922, VertexFormat::Sint32x2);
+
+fn make_subdivided_quad_with_pixel_coords(width: usize, height: usize) -> Mesh {
+    let mut positions = Vec::with_capacity(width * height);
+    let mut uvs = Vec::with_capacity(width * height);
+    let mut vertex_pixel_coord = Vec::with_capacity(width * height);
+    let mut pixel_coord_0 = Vec::with_capacity(width * height);
+    let mut pixel_coord_1 = Vec::with_capacity(width * height);
+    let mut pixel_coord_2 = Vec::with_capacity(width * height);
+    for y in 1..height {
+        for x in 1..width {
+            let x = x as i32;
+            let y = y as i32;
+            let triangles = [
+                // first triangle, upper half
+                [[x, y], [x - 1, y], [x - 1, y - 1]],
+                // second triangle, lower half
+                [[x, y], [x - 1, y - 1], [x, y - 1]],
+            ];
+            for triangle in triangles {
+                for [x, y] in triangle {
+                    vertex_pixel_coord.push([x, y]);
+                    pixel_coord_0.push(triangle[0]);
+                    pixel_coord_1.push(triangle[1]);
+                    pixel_coord_2.push(triangle[2]);
+                    let xf = (x as f32) / ((width - 1) as f32);
+                    let yf = (y as f32) / ((height - 1) as f32);
+                    positions.push([xf, yf, 0.0]);
+                    uvs.push([xf, yf]);
+                }
+            }
+        }
+    }
+
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_attribute(ATTRIBUTE_VERTEX_PIXEL_COORD, vertex_pixel_coord);
+    mesh.insert_attribute(ATTRIBUTE_PIXEL_COORD_0, pixel_coord_0);
+    mesh.insert_attribute(ATTRIBUTE_PIXEL_COORD_1, pixel_coord_1);
+    mesh.insert_attribute(ATTRIBUTE_PIXEL_COORD_2, pixel_coord_2);
+    mesh
 }
