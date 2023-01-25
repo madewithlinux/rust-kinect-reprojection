@@ -11,9 +11,9 @@ pub use image::{Rgb, RgbImage};
 
 use kinect1_sys::{
     INuiCoordinateMapper, INuiFrameTexture, INuiSensor, NuiCreateSensorByIndex, NuiGetSensorCount, HANDLE, HRESULT,
-    NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME, NUI_IMAGE_PLAYER_INDEX_MASK,
-    NUI_IMAGE_PLAYER_INDEX_SHIFT, NUI_IMAGE_STREAM_FLAG_DISTINCT_OVERFLOW_DEPTH_VALUES,
-    NUI_IMAGE_STREAM_FLAG_ENABLE_NEAR_MODE, NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA, NUI_LOCKED_RECT,
+    NUI_DEPTH_IMAGE_PIXEL, NUI_DEPTH_IMAGE_POINT, NUI_IMAGE_FRAME, NUI_IMAGE_PLAYER_INDEX_SHIFT,
+    NUI_IMAGE_STREAM_FLAG_DISTINCT_OVERFLOW_DEPTH_VALUES, NUI_IMAGE_STREAM_FLAG_ENABLE_NEAR_MODE,
+    NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA, NUI_LOCKED_RECT,
 };
 pub use kinect1_sys::{NuiDepthPixelToDepth, NuiDepthPixelToPlayerIndex};
 
@@ -65,8 +65,8 @@ use windows::Win32::{
 use winresult::{HResult, HResultError};
 
 mod hresult_helper;
-pub mod worker_v2;
 pub mod skeleton;
+pub mod worker_v2;
 
 #[derive(Error, Debug)]
 pub enum KinectError {

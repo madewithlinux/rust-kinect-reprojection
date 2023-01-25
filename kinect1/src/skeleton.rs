@@ -1,5 +1,4 @@
 use enumset::{EnumSet, EnumSetType};
-use glam::Vec3;
 use itertools::Itertools;
 use kinect1_sys::{NUI_SKELETON_COUNT, _NUI_SKELETON_POSITION_INDEX_NUI_SKELETON_POSITION_COUNT};
 use num_derive::{FromPrimitive, ToPrimitive};

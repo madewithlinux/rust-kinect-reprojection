@@ -90,8 +90,8 @@ pub struct ReceiverThreadData {
     args: ReceiverThreadArgs,
     color_width: usize,
     color_height: usize,
-    depth_width: usize,
-    depth_height: usize,
+    // depth_width: usize,
+    // depth_height: usize,
 
     sensor: *mut INuiSensor,
 
@@ -145,8 +145,8 @@ impl ReceiverThreadData {
             args,
             color_width,
             color_height,
-            depth_width,
-            depth_height,
+            // depth_width,
+            // depth_height,
 
             sensor: null_mut(),
 
