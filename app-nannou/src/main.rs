@@ -221,12 +221,7 @@ fn update(app: &App, model: &mut Model, update: Update) {
         ui.label("Rotation:");
         ui.add(egui::Slider::new(&mut settings.rotation, 0.0..=360.0));
 
-        // Random color button
-        let clicked = ui.button("Random color").clicked();
-
-        if clicked {
-            settings.color = rgb(random(), random(), random());
-        }
+        edit_rgb_as_hsv(ui, &mut settings.color);
     });
 
 
@@ -460,4 +455,32 @@ fn indices_as_bytes(data: &[u16]) -> &[u8] {
 
 fn uniforms_as_bytes(uniforms: &Uniforms) -> &[u8] {
     unsafe { wgpu::bytes::from(uniforms) }
+}
+
+
+fn edit_rgb_as_hsv(ui: &mut egui::Ui, color: &mut Srgb<u8>) {
+    // rgba(
+    //     color.red as f32 / 255.0,
+    //     color.green as f32 / 255.0,
+    //     color.blue as f32 / 255.0,
+    // );
+    let hsv_color: Hsv = color.into_format::<f32>().into();
+    let mut egui_hsv = egui::color::Hsva::new(
+        hsv_color.hue.to_positive_radians() as f32 / (std::f32::consts::PI * 2.0),
+        hsv_color.saturation,
+        hsv_color.value,
+        1.0,
+    );
+
+    if egui::color_picker::color_edit_button_hsva(
+        ui,
+        &mut egui_hsv,
+        egui::color_picker::Alpha::Opaque,
+    )
+    .changed()
+    {
+        let [r,g,b] = egui_hsv.to_srgb();
+        *color = Srgb::from_components((r,g,b));
+        // *color = nannou::color::hsv(egui_hsv.h, egui_hsv.s, egui_hsv.v).into();
+    }
 }

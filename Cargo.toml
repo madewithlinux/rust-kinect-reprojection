@@ -1,7 +1,8 @@
 [workspace]
 resolver = "2"
 members=[
-    "app-nannou",
+    # "app-nannou",
+    "app-egui-three-d",
     # "app",
     # "app-bevy",
 
