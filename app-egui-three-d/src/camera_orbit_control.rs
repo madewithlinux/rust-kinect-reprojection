@@ -1,8 +1,10 @@
 use three_d::*;
 
 /// similar to theee-d OrbitControl, but with customizable speed
+#[derive(Debug)]
 pub struct CameraOrbitControl {
     control: CameraControl,
+    drag_speed: f32,
 }
 
 impl CameraOrbitControl {
@@ -20,6 +22,7 @@ impl CameraOrbitControl {
                 },
                 ..Default::default()
             },
+            drag_speed: 0.5,
         }
     }
 
@@ -31,7 +34,11 @@ impl CameraOrbitControl {
             _ => (),
         }
     }
+    pub fn get_orbit_drag_speed(&self) -> f32 {
+        self.drag_speed
+    }
     pub fn set_orbit_drag_speed(&mut self, drag_speed: f32) {
+        self.drag_speed = drag_speed;
         Self::set_orbit_speed(&mut self.control.left_drag_horizontal, drag_speed);
         Self::set_orbit_speed(&mut self.control.left_drag_vertical, drag_speed);
     }
