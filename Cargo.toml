@@ -3,8 +3,8 @@ resolver = "2"
 members=[
     # "app-nannou",
     "app-egui-three-d",
-    # "app",
-    # "app-bevy",
+    "app",
+    "app-bevy",
 
     "kinect1",
     "kinect1-sys",
