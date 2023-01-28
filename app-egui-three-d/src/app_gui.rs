@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use three_d::{
-    egui::{DragValue, Grid, Ui},
+    egui::{DragValue, Grid, Slider, Ui},
     *,
 };
 
@@ -11,18 +11,17 @@ use crate::{
 };
 
 pub struct AppGui {
-    // TODO: maybe make a separate gui wrapper, so that we don't have to use `Rc<RefCell<>>`?
-    pub gui: Rc<RefCell<three_d::GUI>>,
+    pub gui: three_d::GUI,
     pub enabled: bool,
+    pub changed: bool,
 }
 
 impl AppGui {
     pub fn new(context: &Context) -> Self {
         Self {
-            // gui: three_d::GUI::new(context),
-            // gui: RefCell::new(three_d::GUI::new(context)),
-            gui: Rc::new(RefCell::new(three_d::GUI::new(context))),
+            gui: three_d::GUI::new(context),
             enabled: true,
+            changed: false,
         }
     }
 
@@ -35,9 +34,9 @@ impl AppGui {
         depth_model: &mut DepthModel,
         debug_models: &mut DebugModels,
     ) {
+        self.changed = false;
         if self.enabled {
-            let gui = self.gui.clone();
-            gui.borrow_mut().update(
+            self.gui.update(
                 &mut frame_input.events,
                 frame_input.accumulated_time,
                 frame_input.viewport,
@@ -45,73 +44,78 @@ impl AppGui {
                 |gui_context| {
                     use three_d::egui::*;
                     Window::new("window").show(gui_context, |ui| {
-                        self.gui_update_inner(
-                            ui,
+                        GuiWindowContent {
                             app_settings,
                             camera,
                             camera_control,
                             depth_model,
                             debug_models,
                             gui_context,
-                        );
+                            changed: &mut self.changed,
+                        }
+                        .main_settings_window(ui);
                     });
                 },
             );
         }
     }
 
-    fn gui_update_inner(
-        &mut self,
-        ui: &mut Ui,
-        app_settings: &mut AppSettings,
-        camera: &mut Camera,
-        camera_control: &mut CameraOrbitControl,
-        depth_model: &mut DepthModel,
-        debug_models: &mut DebugModels,
-        gui_context: &egui::Context,
-    ) {
-        use three_d::egui::*;
-        ui.add(Slider::new(&mut depth_model.angle, 0.01..=10.0).text("angle"));
-
-        let mut orbit_drag_speed = camera_control.get_orbit_drag_speed();
-        if ui
-            .add(Slider::new(&mut orbit_drag_speed, 0.01..=0.5).text("orbit drag speed"))
-            .changed()
-        {
-            camera_control.set_orbit_drag_speed(orbit_drag_speed);
-        }
-
-        ui.collapsing("camera info", |ui| camera_info(ui, camera));
-    }
-
     pub(crate) fn render(&mut self, render_target: &RenderTarget, _camera: &Camera) {
         if self.enabled {
-            render_target.write(|| self.gui.borrow().render());
+            render_target.write(|| self.gui.render());
         }
     }
 }
 
-fn camera_info(ui: &mut Ui, camera: &mut Camera) {
-    // TODO: also need to update the camera orbit controller, apparently
-    Grid::new("camera grid").striped(true).show(ui, |ui| {
-        ui.label("position");
-        if let Some(position) = vec3_edit(ui, camera.position()) {
-            camera.set_view(position, *camera.target(), *camera.up());
-        }
-        ui.end_row();
+struct GuiWindowContent<'a> {
+    app_settings: &'a mut AppSettings,
+    camera: &'a mut Camera,
+    camera_control: &'a mut CameraOrbitControl,
+    depth_model: &'a mut DepthModel,
+    debug_models: &'a mut DebugModels,
+    gui_context: &'a egui::Context,
+    changed: &'a mut bool,
+}
 
-        ui.label("target");
-        if let Some(target) = vec3_edit(ui, camera.target()) {
-            camera.set_view(*camera.position(), target, *camera.up());
-        }
-        ui.end_row();
+impl<'a> GuiWindowContent<'a> {
+    pub fn main_settings_window(&mut self, ui: &mut Ui) {
+        ui.add(Slider::new(&mut self.depth_model.angle, 0.01..=10.0).text("angle"));
 
-        ui.label("up");
-        if let Some(up) = vec3_edit(ui, camera.up()) {
-            camera.set_view(*camera.position(), *camera.target(), up);
+        let mut orbit_drag_speed = self.camera_control.get_orbit_drag_speed();
+        if ui
+            .add(Slider::new(&mut orbit_drag_speed, 0.01..=0.5).text("orbit drag speed"))
+            .changed()
+        {
+            self.camera_control.set_orbit_drag_speed(orbit_drag_speed);
         }
-        ui.end_row();
-    });
+
+        ui.collapsing("camera info", |ui| self.camera_info(ui));
+    }
+
+    pub fn camera_info(&mut self, ui: &mut Ui) {
+        Grid::new("camera grid").striped(true).show(ui, |ui| {
+            ui.label("position");
+            if let Some(position) = vec3_edit(ui, self.camera.position()) {
+                self.camera.set_view(position, *self.camera.target(), *self.camera.up());
+                *self.changed = true;
+            }
+            ui.end_row();
+
+            ui.label("target");
+            if let Some(target) = vec3_edit(ui, self.camera.target()) {
+                self.camera.set_view(*self.camera.position(), target, *self.camera.up());
+                *self.changed = true;
+            }
+            ui.end_row();
+
+            ui.label("up");
+            if let Some(up) = vec3_edit(ui, self.camera.up()) {
+                self.camera.set_view(*self.camera.position(), *self.camera.target(), up);
+                *self.changed = true;
+            }
+            ui.end_row();
+        });
+    }
 }
 
 pub const DEFAULT_SPEED: f32 = 0.1;

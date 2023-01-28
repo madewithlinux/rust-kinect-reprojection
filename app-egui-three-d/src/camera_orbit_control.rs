@@ -43,6 +43,10 @@ impl CameraOrbitControl {
         Self::set_orbit_speed(&mut self.control.left_drag_vertical, drag_speed);
     }
 
+    pub fn on_gui_changed(&mut self, camera: &Camera) {
+        set_camera_control_target(&mut self.control, *camera.target());
+    }
+
     /// Handles the events. Must be called each frame.
     pub fn handle_events(&mut self, camera: &mut Camera, events: &mut [Event]) -> bool {
         if let CameraAction::Zoom {
@@ -62,4 +66,24 @@ impl CameraOrbitControl {
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).max(0.0).min(1.0);
     t * t * (3.0 - 2.0 * t)
+}
+
+fn set_camera_control_target(control: &mut CameraControl, new_target: Vec3) {
+    set_camera_action_target(&mut control.left_drag_horizontal, new_target);
+    set_camera_action_target(&mut control.left_drag_vertical, new_target);
+    set_camera_action_target(&mut control.middle_drag_horizontal, new_target);
+    set_camera_action_target(&mut control.middle_drag_vertical, new_target);
+    set_camera_action_target(&mut control.right_drag_horizontal, new_target);
+    set_camera_action_target(&mut control.right_drag_vertical, new_target);
+    set_camera_action_target(&mut control.scroll_horizontal, new_target);
+    set_camera_action_target(&mut control.scroll_vertical, new_target);
+}
+
+fn set_camera_action_target(action: &mut CameraAction, new_target: Vec3) {
+    match action {
+        CameraAction::OrbitUp { target, .. }
+        | CameraAction::OrbitLeft { target, .. }
+        | CameraAction::Zoom { target, .. } => *target = new_target,
+        _ => (),
+    }
 }

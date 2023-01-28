@@ -55,6 +55,10 @@ impl App {
             &mut self.depth_model,
             &mut self.debug_models,
         );
+        if self.app_gui.changed {
+            // update components from gui changes
+            self.camera_control.on_gui_changed(&self.camera);
+        }
 
         self.depth_model.update_self(frame_input);
         self.camera_control
