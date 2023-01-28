@@ -1,6 +1,6 @@
 use three_d::*;
 
-use crate::{per_frame_update::PerFrameUpdate, util::default};
+use crate::util::default;
 
 pub struct DepthModel {
     pub angle: f32,
@@ -34,18 +34,13 @@ impl DepthModel {
             model,
         }
     }
-}
 
-impl PerFrameUpdate for DepthModel {
-    fn update_self(&mut self, frame_input: &mut FrameInput) {
+    pub(crate) fn update_self(&mut self, frame_input: &mut FrameInput) {
         self.model
-        .set_transformation(Mat4::from_angle_y(radians((self.angle) as f32)));
+            .set_transformation(Mat4::from_angle_y(radians((self.angle) as f32)));
     }
 
-    fn update_app(app: &mut crate::app::App, frame_input: &mut FrameInput) {
-    }
-
-    fn render(&mut self, render_target: &RenderTarget, camera: &Camera) {
+    pub(crate) fn render(&mut self, render_target: &RenderTarget, camera: &Camera) {
         render_target.render(&camera, &[&self.model], &[]);
     }
 }
