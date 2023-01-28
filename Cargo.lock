@@ -48,7 +48,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
  "cfg-if",
- "getrandom",
  "once_cell",
  "version_check",
 ]
@@ -302,7 +301,7 @@ dependencies = [
  "bevy_reflect",
  "bevy_render",
  "bevy_utils",
- "egui 0.20.1",
+ "egui",
  "image 0.24.5",
  "once_cell",
  "pretty-type-name",
@@ -506,7 +505,7 @@ checksum = "f93fab81b00d664b7fd09c74eadcc8ab4a608649af1fb355647cd43f95f38ec6"
 dependencies = [
  "arboard",
  "bevy",
- "egui 0.20.1",
+ "egui",
  "thread_local",
  "webbrowser",
 ]
@@ -1708,23 +1707,12 @@ dependencies = [
 
 [[package]]
 name = "egui"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc9fcd393c3daaaf5909008a1d948319d538b79c51871e4df0993260260a94e4"
-dependencies = [
- "ahash 0.8.3",
- "epaint 0.19.0",
- "nohash-hasher",
-]
-
-[[package]]
-name = "egui"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65a5e883a316e53866977450eecfbcac9c48109c2ab3394af29feb83fcde4ea9"
 dependencies = [
  "ahash 0.8.3",
- "epaint 0.20.0",
+ "epaint",
  "nohash-hasher",
 ]
 
@@ -1734,17 +1722,17 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77bb3bc3ce46356c466e04fea06d8110bf2d78b0ca7f98c4c404b2c7b502f392"
 dependencies = [
- "egui 0.20.1",
+ "egui",
 ]
 
 [[package]]
 name = "egui_glow"
-version = "0.19.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad77d4a00402bae9658ee64be148f4b2a0b38e4fc7874970575ca01ed1c5b75d"
+checksum = "6d4b5960cb1bae1c403a6c9027a745210a41913433b10c73b6e7d76a1017f8b4"
 dependencies = [
  "bytemuck",
- "egui 0.19.0",
+ "egui",
  "glow",
  "memoffset 0.6.5",
  "tracing",
@@ -1757,15 +1745,6 @@ name = "either"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90e5c1c8368803113bf0c9584fc495a58b86dc8a29edbf8fe877d21d9507e797"
-
-[[package]]
-name = "emath"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9542a40106fdba943a055f418d1746a050e1a903a049b030c2b097d4686a33cf"
-dependencies = [
- "bytemuck",
-]
 
 [[package]]
 name = "emath"
@@ -1841,21 +1820,6 @@ dependencies = [
 
 [[package]]
 name = "epaint"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ba04741be7f6602b1a1b28f1082cce45948a7032961c52814f8946b28493300"
-dependencies = [
- "ab_glyph",
- "ahash 0.8.3",
- "atomic_refcell",
- "bytemuck",
- "emath 0.19.0",
- "nohash-hasher",
- "parking_lot",
-]
-
-[[package]]
-name = "epaint"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de14b65fe5e423e0058f77a8beb2c863b056d0566d6c4ce0d097aa5814cb705a"
@@ -1865,7 +1829,7 @@ dependencies = [
  "atomic_refcell",
  "bytemuck",
  "ecolor",
- "emath 0.20.0",
+ "emath",
  "nohash-hasher",
  "parking_lot",
 ]
@@ -2375,55 +2339,42 @@ dependencies = [
 
 [[package]]
 name = "glutin"
-version = "0.29.1"
+version = "0.30.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "444c9ad294fdcaf20ccf6726b78f380b5450275540c9b68ab62f49726ad1c713"
+checksum = "524d807cd49a0c56a53ef9a6738cd15e7c8c4e9d37a3b7fdb3c250c1cd5bf7a3"
 dependencies = [
+ "bitflags",
+ "cfg_aliases",
  "cgl",
  "cocoa",
  "core-foundation",
  "glutin_egl_sys",
- "glutin_gles2_sys",
  "glutin_glx_sys",
  "glutin_wgl_sys",
  "libloading",
- "log",
  "objc",
  "once_cell",
- "osmesa-sys",
- "parking_lot",
  "raw-window-handle 0.5.0",
- "wayland-client",
- "wayland-egl",
- "winapi",
- "winit",
+ "wayland-sys 0.30.1",
+ "windows-sys 0.36.1",
+ "x11-dl",
 ]
 
 [[package]]
 name = "glutin_egl_sys"
-version = "0.1.6"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68900f84b471f31ea1d1355567eb865a2cf446294f06cef8d653ed7bcf5f013d"
+checksum = "3adbb8fec0e18e340f990c78f79f5f0e142d0d83f46b10909aaa7d251c00afdf"
 dependencies = [
  "gl_generator",
- "winapi",
-]
-
-[[package]]
-name = "glutin_gles2_sys"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8094e708b730a7c8a1954f4f8a31880af00eb8a1c5b5bf85d28a0a3c6d69103"
-dependencies = [
- "gl_generator",
- "objc",
+ "windows-sys 0.36.1",
 ]
 
 [[package]]
 name = "glutin_glx_sys"
-version = "0.1.8"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d93d0575865098580c5b3a423188cd959419912ea60b1e48e8b3b526f6d02468"
+checksum = "947c4850c58211c9627969c2b4e2674764b81ae5b47bab2c9a477d7942f96e0f"
 dependencies = [
  "gl_generator",
  "x11-dl",
@@ -2431,9 +2382,9 @@ dependencies = [
 
 [[package]]
 name = "glutin_wgl_sys"
-version = "0.1.5"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3da5951a1569dbab865c6f2a863efafff193a93caf05538d193e9e3816d21696"
+checksum = "20c33975a6c9d49d72c8f032a60079bf8df536954fbf9e4cee90396ace815c57"
 dependencies = [
  "gl_generator",
 ]
@@ -3600,15 +3551,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "osmesa-sys"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88cfece6e95d2e717e0872a7f53a8684712ad13822a7979bc760b9c77ec0013b"
-dependencies = [
- "shared_library",
-]
-
-[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4030,7 +3972,7 @@ dependencies = [
  "bevy_reflect",
  "bevy_render",
  "bytemuck",
- "egui 0.20.1",
+ "egui",
  "egui_dock",
  "image 0.24.5",
  "itertools",
@@ -4244,16 +4186,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "900fba806f70c630b0a382d0d825e17a0f19fcd059a2ade1ff237bcddf446b31"
 dependencies = [
  "lazy_static",
-]
-
-[[package]]
-name = "shared_library"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a9e7e0f2bfae24d8a5b5a66c5b257a83c7412304311512a0c054cd5e619da11"
-dependencies = [
- "lazy_static",
- "libc",
 ]
 
 [[package]]
@@ -4510,17 +4442,17 @@ dependencies = [
 
 [[package]]
 name = "three-d"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f4125ec0cd1009fa85c8443249b464d368bafadfe6e41dc9f9ded974312f4b4"
+version = "0.15.0"
+source = "git+https://github.com/asny/three-d/?rev=0696f299f05ae81f9b5b9bc282de06cfd55a6f7f#0696f299f05ae81f9b5b9bc282de06cfd55a6f7f"
 dependencies = [
  "cgmath",
- "egui 0.19.0",
+ "egui",
  "egui_glow",
  "getrandom",
  "glow",
  "glutin",
  "instant",
+ "raw-window-handle 0.5.0",
  "serde",
  "serde-wasm-bindgen",
  "thiserror",
@@ -4533,8 +4465,7 @@ dependencies = [
 [[package]]
 name = "three-d-asset"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8aa137288dbd9866715cb5dbd0a3eebfed5fa06de8c620fa20904fc9533b5e27"
+source = "git+https://github.com/asny/three-d-asset#b8ea0c876d2b6f8bd80eb697beb7f1bd648a3bdc"
 dependencies = [
  "cgmath",
  "half",
@@ -4908,7 +4839,7 @@ dependencies = [
  "scoped-tls",
  "wayland-commons",
  "wayland-scanner",
- "wayland-sys",
+ "wayland-sys 0.29.5",
 ]
 
 [[package]]
@@ -4920,7 +4851,7 @@ dependencies = [
  "nix 0.24.3",
  "once_cell",
  "smallvec",
- "wayland-sys",
+ "wayland-sys 0.29.5",
 ]
 
 [[package]]
@@ -4932,16 +4863,6 @@ dependencies = [
  "nix 0.24.3",
  "wayland-client",
  "xcursor",
-]
-
-[[package]]
-name = "wayland-egl"
-version = "0.29.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "402de949f81a012926d821a2d659f930694257e76dd92b6e0042ceb27be4107d"
-dependencies = [
- "wayland-client",
- "wayland-sys",
 ]
 
 [[package]]
@@ -4975,6 +4896,18 @@ checksum = "be12ce1a3c39ec7dba25594b97b42cb3195d54953ddb9d3d95a7c3902bc6e9d4"
 dependencies = [
  "dlib",
  "lazy_static",
+ "pkg-config",
+]
+
+[[package]]
+name = "wayland-sys"
+version = "0.30.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96b2a02ac608e07132978689a6f9bf4214949c85998c247abadd4f4129b1aa06"
+dependencies = [
+ "dlib",
+ "lazy_static",
+ "log",
  "pkg-config",
 ]
 

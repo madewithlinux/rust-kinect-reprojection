@@ -26,7 +26,8 @@ tracing = "0.1.37"
 # egui_glow = "0.20.1"
 # glow = "^0.11"
 # three-d = { version = "0.14", default-features = false }
-three-d = { version = "0.14", features=["egui-gui"] }
+# three-d = { version = "0.14", features=["egui-gui"] }
+three-d = { git = "https://github.com/asny/three-d/", rev = "0696f299f05ae81f9b5b9bc282de06cfd55a6f7f", features=["egui-gui"] }
 
 rfd = "0.10.0"
 

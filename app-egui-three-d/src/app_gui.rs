@@ -26,10 +26,10 @@ impl AppGui {
         if app.app_gui.enabled {
             let gui = &mut app.app_gui.gui;
 
-            let do_log = frame_input.events.len() > 0;
-            if do_log {
-                dbg!("before", &frame_input.events);
-            }
+            // let do_log = frame_input.events.len() > 0;
+            // if do_log {
+            //     dbg!("before", &frame_input.events);
+            // }
 
             gui.update(
                 &mut frame_input.events,
@@ -59,9 +59,9 @@ impl AppGui {
                 },
             );
 
-            if do_log {
-                dbg!("after", &frame_input.events);
-            }
+            // if do_log {
+            //     dbg!("after", &frame_input.events);
+            // }
         }
     }
 
