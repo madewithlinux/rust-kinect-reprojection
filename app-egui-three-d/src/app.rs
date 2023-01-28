@@ -46,7 +46,15 @@ impl App {
     pub(crate) fn render_loop(&mut self, mut frame_input: FrameInput) -> FrameOutput {
         let frame_input = &mut frame_input;
 
-        AppGui::gui_update(self, frame_input);
+        // AppGui::gui_update(self, frame_input);
+        self.app_gui.gui_update(
+            frame_input,
+            &mut self.app_settings,
+            &mut self.camera,
+            &mut self.camera_control,
+            &mut self.depth_model,
+            &mut self.debug_models,
+        );
 
         self.depth_model.update_self(frame_input);
         self.camera_control

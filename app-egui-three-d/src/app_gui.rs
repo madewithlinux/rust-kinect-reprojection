@@ -1,37 +1,43 @@
+use std::{cell::RefCell, rc::Rc};
+
 use three_d::{
     egui::{DragValue, Grid, Ui},
     *,
 };
 
+use crate::{
+    app_settings::AppSettings, camera_orbit_control::CameraOrbitControl, debug_models::DebugModels,
+    depth_model::DepthModel,
+};
+
 pub struct AppGui {
-    pub gui: three_d::GUI,
+    // TODO: maybe make a separate gui wrapper, so that we don't have to use `Rc<RefCell<>>`?
+    pub gui: Rc<RefCell<three_d::GUI>>,
     pub enabled: bool,
-    pub a0: f32,
-    pub a1: f32,
-    pub a2: f32,
 }
 
 impl AppGui {
     pub fn new(context: &Context) -> Self {
         Self {
-            gui: three_d::GUI::new(context),
+            // gui: three_d::GUI::new(context),
+            // gui: RefCell::new(three_d::GUI::new(context)),
+            gui: Rc::new(RefCell::new(three_d::GUI::new(context))),
             enabled: true,
-            a0: 0.0,
-            a1: 0.0,
-            a2: 0.0,
         }
     }
 
-    pub(crate) fn gui_update(app: &mut crate::app::App, frame_input: &mut FrameInput) {
-        if app.app_gui.enabled {
-            let gui = &mut app.app_gui.gui;
-
-            // let do_log = frame_input.events.len() > 0;
-            // if do_log {
-            //     dbg!("before", &frame_input.events);
-            // }
-
-            gui.update(
+    pub(crate) fn gui_update(
+        &mut self,
+        frame_input: &mut FrameInput,
+        app_settings: &mut AppSettings,
+        camera: &mut Camera,
+        camera_control: &mut CameraOrbitControl,
+        depth_model: &mut DepthModel,
+        debug_models: &mut DebugModels,
+    ) {
+        if self.enabled {
+            let gui = self.gui.clone();
+            gui.borrow_mut().update(
                 &mut frame_input.events,
                 frame_input.accumulated_time,
                 frame_input.viewport,
@@ -39,40 +45,54 @@ impl AppGui {
                 |gui_context| {
                     use three_d::egui::*;
                     Window::new("window").show(gui_context, |ui| {
-                        ui.add(Slider::new(&mut app.depth_model.angle, 0.01..=10.0).text("angle"));
-
-                        let mut orbit_drag_speed = app.camera_control.get_orbit_drag_speed();
-                        if ui
-                            .add(Slider::new(&mut orbit_drag_speed, 0.01..=0.5).text("orbit drag speed"))
-                            .changed()
-                        {
-                            app.camera_control.set_orbit_drag_speed(orbit_drag_speed);
-                        }
-
-                        ui.add(DragValue::new(&mut app.app_gui.a0));
-                        ui.add(DragValue::new(&mut app.app_gui.a1));
-                        ui.add(DragValue::new(&mut app.app_gui.a2));
-
-                        ui.collapsing("camera info", |ui| camera_info(ui, &mut app.camera));
-
+                        self.gui_update_inner(
+                            ui,
+                            app_settings,
+                            camera,
+                            camera_control,
+                            depth_model,
+                            debug_models,
+                            gui_context,
+                        );
                     });
                 },
             );
-
-            // if do_log {
-            //     dbg!("after", &frame_input.events);
-            // }
         }
+    }
+
+    fn gui_update_inner(
+        &mut self,
+        ui: &mut Ui,
+        app_settings: &mut AppSettings,
+        camera: &mut Camera,
+        camera_control: &mut CameraOrbitControl,
+        depth_model: &mut DepthModel,
+        debug_models: &mut DebugModels,
+        gui_context: &egui::Context,
+    ) {
+        use three_d::egui::*;
+        ui.add(Slider::new(&mut depth_model.angle, 0.01..=10.0).text("angle"));
+
+        let mut orbit_drag_speed = camera_control.get_orbit_drag_speed();
+        if ui
+            .add(Slider::new(&mut orbit_drag_speed, 0.01..=0.5).text("orbit drag speed"))
+            .changed()
+        {
+            camera_control.set_orbit_drag_speed(orbit_drag_speed);
+        }
+
+        ui.collapsing("camera info", |ui| camera_info(ui, camera));
     }
 
     pub(crate) fn render(&mut self, render_target: &RenderTarget, _camera: &Camera) {
         if self.enabled {
-            render_target.write(|| self.gui.render());
+            render_target.write(|| self.gui.borrow().render());
         }
     }
 }
 
 fn camera_info(ui: &mut Ui, camera: &mut Camera) {
+    // TODO: also need to update the camera orbit controller, apparently
     Grid::new("camera grid").striped(true).show(ui, |ui| {
         ui.label("position");
         if let Some(position) = vec3_edit(ui, camera.position()) {
@@ -92,13 +112,6 @@ fn camera_info(ui: &mut Ui, camera: &mut Camera) {
         }
         ui.end_row();
     });
-    // ui.label(format!("position: {:?}", camera.position()));
-    // ui.label(format!("target: {:?}", camera.target()));
-    // ui.label(format!("up: {:?}", camera.up()));
-
-    // ui.label(format!("projection: {:?}", camera.projection()));
-    // ui.label(format!("view: {:?}", camera.view()));
-    // ui.label(format!("viewport: {:?}", camera.viewport()));
 }
 
 pub const DEFAULT_SPEED: f32 = 0.1;
@@ -106,54 +119,13 @@ pub const DEFAULT_SPEED: f32 = 0.1;
 pub fn vec3_edit(ui: &mut Ui, input: &Vec3) -> Option<Vec3> {
     let mut value = *input;
     let mut changed = false;
-    ui.horizontal(|ui| {
-        let changed0 = ui
-            .add(
-                DragValue::from_get_set(|v| {
-                    if let Some(v) = v {
-                        value.x = v as f32;
-                    }
-                    value.x as f64
-                })
-                .speed(DEFAULT_SPEED),
-            )
-            .changed();
-        let changed1 = ui
-            .add(
-                DragValue::from_get_set(|v| {
-                    if let Some(v) = v {
-                        value.y = v as f32;
-                    }
-                    value.y as f64
-                })
-                .speed(DEFAULT_SPEED),
-            )
-            .changed();
-        let changed2 = ui
-            .add(
-                DragValue::from_get_set(|v| {
-                    if let Some(v) = v {
-                        value.z = v as f32;
-                    }
-                    value.z as f64
-                })
-                .speed(DEFAULT_SPEED),
-            )
-            .changed();
-        // let changed0 = ui.add(DragValue::new(&mut value.x).speed(DEFAULT_SPEED)).changed();
-        // let changed1 = ui.add(DragValue::new(&mut value.y).speed(DEFAULT_SPEED)).changed();
-        // let changed2 = ui.add(DragValue::new(&mut value.z).speed(DEFAULT_SPEED)).changed();
-        changed = changed0 || changed1 || changed2
+    ui.columns(3, |uis| {
+        changed |= uis[0].add(DragValue::new(&mut value.x).speed(DEFAULT_SPEED)).changed();
+        changed |= uis[1].add(DragValue::new(&mut value.y).speed(DEFAULT_SPEED)).changed();
+        changed |= uis[2].add(DragValue::new(&mut value.z).speed(DEFAULT_SPEED)).changed();
     });
-    // ui.columns(3, |uis| {
-    //     // uis[0].id
-    //     let changed0 = uis[0].add(DragValue::new(&mut value.x).speed(DEFAULT_SPEED)).changed();
-    //     let changed1 = uis[1].add(DragValue::new(&mut value.y).speed(DEFAULT_SPEED)).changed();
-    //     let changed2 = uis[2].add(DragValue::new(&mut value.z).speed(DEFAULT_SPEED)).changed();
-    //     changed = changed0 || changed1 || changed2
-    // });
     if changed {
-        dbg!("changed", input, value);
+        // dbg!("changed", input, value);
         Some(value)
     } else {
         None
