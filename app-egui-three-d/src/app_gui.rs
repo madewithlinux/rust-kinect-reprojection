@@ -79,13 +79,20 @@ struct GuiWindowContent<'a> {
 
 impl<'a> GuiWindowContent<'a> {
     pub fn main_settings_window(&mut self, ui: &mut Ui) {
-        ui.add(Slider::new(&mut self.depth_model.angle, 0.01..=10.0).text("angle"));
+        if ui.button("reload shader").clicked() {
+            self.depth_model.should_reload_shader = true;
+        }
+
+        ui.checkbox(&mut self.debug_models.show_axes, "show axes");
+        ui.checkbox(&mut self.debug_models.show_test_triangle, "show test triangle");
+        ui.add(Slider::new(&mut self.debug_models.angle, 0.01..=10.0).text("angle"));
 
         *self.changed |= ui
             .add(Slider::new(&mut self.state.orbit_drag_speed, 0.01..=0.25).text("orbit drag speed"))
             .changed();
 
         ui.collapsing("camera info", |ui| self.camera_info(ui));
+
     }
 
     pub fn camera_info(&mut self, ui: &mut Ui) {
@@ -113,6 +120,12 @@ pub const DEFAULT_SPEED: f32 = 0.1;
 
 pub trait GuiEditable {
     fn gui_edit(&mut self, ui: &mut Ui) -> Response;
+}
+
+impl GuiEditable for bool {
+    fn gui_edit(&mut self, ui: &mut Ui) -> Response {
+        ui.checkbox(self, "")
+    }
 }
 
 impl GuiEditable for f32 {

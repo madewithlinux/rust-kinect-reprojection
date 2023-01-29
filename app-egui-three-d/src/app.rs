@@ -70,6 +70,7 @@ impl App {
         }
 
         self.depth_model.update_self(frame_input);
+        self.debug_models.update_self(frame_input);
         self.orbit_camera.handle_events(&mut frame_input.events);
 
         DebugModels::update_app(self, frame_input);
@@ -80,8 +81,8 @@ impl App {
         let render_target = &frame_input.screen();
         let camera = &self.orbit_camera.camera;
         render_target.clear(ClearState::color_and_depth(0.8, 0.8, 0.8, 1.0, 1.0));
-        self.depth_model.render(render_target, camera);
         self.debug_models.render(render_target, camera);
+        self.depth_model.render(render_target, camera);
         // render gui last, so that it's always on top
         self.app_gui.render(render_target, camera);
 
