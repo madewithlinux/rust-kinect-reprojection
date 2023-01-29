@@ -2,7 +2,7 @@
 resolver = "2"
 members=[
     # "app-nannou",
-    "app-egui-three-d",
+    # "app-egui-three-d",
     "app",
     "app-bevy",
 
