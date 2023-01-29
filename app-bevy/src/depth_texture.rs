@@ -3,16 +3,14 @@ use bevy_reflect::TypeUuid;
 use bevy_render::{
     mesh::{Indices, MeshVertexAttribute, VertexAttributeValues},
     primitives::Aabb,
-    render_resource::{
-        self, AsBindGroup, BlendState, ColorTargetState, ColorWrites, PolygonMode, PrimitiveTopology, ShaderRef,
-        ShaderType, TextureFormat, TextureUsages, VertexFormat,
-    },
+    render_resource::{self, AsBindGroup, PrimitiveTopology, ShaderRef, ShaderType, TextureFormat, VertexFormat},
 };
 use bytemuck::checked::{cast_slice, cast_slice_mut};
 use itertools::Itertools;
 
 use crate::{
-    receiver::{KinectDepthTransformer, KinectFrameBuffers},
+    app_settings::AppSettings,
+    receiver::{KinectDepthTransformer, KinectFrameBuffers, KinectFrameDataDelayBufferV2},
     COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH,
 };
 
@@ -237,7 +235,7 @@ fn spawn_custom_depth_texture(
         &[0, 0, 0, 255],
         bevy_render::render_resource::TextureFormat::Rgba8UnormSrgb,
     ));
-    let coordinates_handle = images.add(Image::new_fill(
+    let coordinates = Image::new_fill(
         bevy_render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
             height: COLOR_HEIGHT as u32,
@@ -246,8 +244,8 @@ fn spawn_custom_depth_texture(
         bevy::render::render_resource::TextureDimension::D2,
         cast_slice(&[0.0, 0.0, 0.0, 0.0]),
         bevy_render::render_resource::TextureFormat::Rgba32Float,
-    ));
-    let player_index_handle = images.add(Image::new_fill(
+    );
+    let player_indexes = Image::new_fill(
         bevy_render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
             height: COLOR_HEIGHT as u32,
@@ -256,19 +254,25 @@ fn spawn_custom_depth_texture(
         bevy::render::render_resource::TextureDimension::D2,
         &[0],
         bevy_render::render_resource::TextureFormat::R8Uint,
-    ));
-
+    );
     let quad_handle = meshes.add(make_subdivided_quad_with_pixel_coords(DEPTH_WIDTH, DEPTH_HEIGHT));
 
+    let uniforms = CustomMaterialUniforms {
+        triangle_max_side_len: 0.3,
+        point_transform_matrix: Mat4::IDENTITY,
+        use_player_index_mask: 0,
+        do_lookback: 1,
+        do_lookahead: 1,
+    };
     let material_handle = materials.add(CustomMaterial {
+        uniforms,
         color: rgba_handle,
-        coordinates: coordinates_handle,
-        player_index: player_index_handle,
-        uniforms: CustomMaterialUniforms {
-            triangle_max_side_len: 0.3,
-            point_transform_matrix: Mat4::IDENTITY,
-            use_player_index_mask: 0,
-        },
+        coordinates: images.add(coordinates.clone()),
+        player_index: images.add(player_indexes.clone()),
+        prev_coordinates: images.add(coordinates.clone()),
+        prev_player_index: images.add(player_indexes.clone()),
+        next_coordinates: images.add(coordinates.clone()),
+        next_player_index: images.add(player_indexes.clone()),
     });
 
     commands.spawn((
@@ -288,62 +292,65 @@ fn spawn_custom_depth_texture(
 
 fn update_custom_depth_texture(
     buffers: Res<KinectFrameBuffers>,
+    depth_transformer: Res<KinectDepthTransformer>,
+    frame_delay_buffer: Res<KinectFrameDataDelayBufferV2>,
+    settings: Res<AppSettings>,
     mut depth_texture: Query<(&DepthTextureMarker, &Handle<CustomMaterial>)>,
     mut materials: ResMut<Assets<CustomMaterial>>,
     mut images: ResMut<Assets<Image>>,
-    depth_transformer: Res<KinectDepthTransformer>,
 ) {
     if !buffers.is_changed() {
         return;
     }
+    let Some(next_frame) = frame_delay_buffer.0.front() else {
+        return;
+    };
     let rgba = &buffers.rgba;
-    let skeleton_points = &buffers.skeleton_points;
-    let player_indexes = &buffers.player_index;
 
     let (_marker, material_handle) = depth_texture.single_mut();
     let Some(material) = materials.get_mut(&material_handle) else {
         info!("material not found");
         return;
     };
-    if let Some(image) = images.get_mut(&material.color) {
-        let image_data = cast_slice_mut::<_, [u8; 4]>(&mut image.data);
-        for (flat_index, &rgba) in rgba.iter().enumerate() {
-            image_data[flat_index] = rgba;
-        }
-    } else {
-        info!("image not found");
-    }
 
-    if let Some(coordinates) = images.get_mut(&material.coordinates) {
-        let coordinates_data = cast_slice_mut::<_, [f32; 4]>(&mut coordinates.data);
-        for (flat_index, &sk_point) in skeleton_points.iter().enumerate() {
-            coordinates_data[flat_index] = if sk_point == Vec3::ZERO {
-                Vec4::ZERO.to_array()
+    let color_handle = &mut material.color;
+    let color_image = images.get_mut(&color_handle).unwrap();
+    cast_slice_mut::<_, [u8; 4]>(&mut color_image.data).copy_from_slice(&rgba);
+
+    // cycle the handles to advance next to current and current to prev (and re-use prev as the new next)
+    std::mem::swap(&mut material.prev_player_index, &mut material.next_player_index);
+    std::mem::swap(&mut material.prev_player_index, &mut material.player_index);
+    std::mem::swap(&mut material.prev_coordinates, &mut material.next_coordinates);
+    std::mem::swap(&mut material.prev_coordinates, &mut material.coordinates);
+
+    // so that we can get by with populating only the next frame, not the current one
+    let skeleton_points = &next_frame.skeleton_points;
+    let player_indexes = &next_frame.player_index;
+    let coordinates_handle = &material.next_coordinates;
+    let player_index_handle = &material.next_player_index;
+
+    if let Some(coordinates) = images.get_mut(&coordinates_handle) {
+        let coordinates_data = cast_slice_mut::<_, Vec4>(&mut coordinates.data);
+        for (coordinate, &sk_point) in coordinates_data.iter_mut().zip(skeleton_points.iter()) {
+            *coordinate = if sk_point == Vec3::ZERO {
+                Vec4::ZERO
             } else {
-                sk_point.extend(1.0).to_array()
+                sk_point.extend(1.0)
             };
         }
     } else {
         info!("coordinates not found");
     }
 
-    if let Some(player_index) = images.get_mut(&material.player_index) {
-        let player_index_data = &mut player_index.data;
-        for (flat_index, &player_index) in player_indexes.iter().enumerate() {
-            player_index_data[flat_index] = player_index;
-        }
-    } else {
-        info!("player_index not found");
-    }
+    let player_index_image = images.get_mut(&player_index_handle).unwrap();
+    player_index_image.data.copy_from_slice(&player_indexes);
 
     // if there's any player index detected, then tell the shader to use the player index
-    material.uniforms.use_player_index_mask = if player_indexes.iter().any(|player_index| *player_index > 0) {
-        1
-    } else {
-        0
-    };
-
+    let any_nonzero_player_index = player_indexes.iter().any(|player_index| *player_index > 0);
+    material.uniforms.use_player_index_mask = any_nonzero_player_index as u32;
     material.uniforms.point_transform_matrix = depth_transformer.point_transform_matrix.into();
+    material.uniforms.do_lookback = settings.depth_texture_do_lookback as u32;
+    material.uniforms.do_lookahead = settings.depth_texture_do_lookahead as u32;
 }
 
 #[derive(ShaderType, Debug, Clone, Reflect)]
@@ -353,9 +360,8 @@ pub struct CustomMaterialUniforms {
     triangle_max_side_len: f32,
     use_player_index_mask: u32,
     point_transform_matrix: Mat4,
-    // TODO
-    // do_lookback: u32,
-    // do_lookahead: u32,
+    do_lookback: u32,
+    do_lookahead: u32,
 }
 
 #[derive(AsBindGroup, Debug, Clone, TypeUuid, Reflect)]
@@ -373,16 +379,15 @@ pub struct CustomMaterial {
     #[texture(4, sample_type = "u_int")]
     player_index: Handle<Image>,
 
-    // TODO
     // textures for lookback/lookahead
-    // #[texture(5)]
-    // prev_coordinates: Handle<Image>,
-    // #[texture(6, sample_type = "u_int")]
-    // prev_player_index: Handle<Image>,
-    // #[texture(7)]
-    // next_coordinates: Handle<Image>,
-    // #[texture(8, sample_type = "u_int")]
-    // next_player_index: Handle<Image>,
+    #[texture(5)]
+    prev_coordinates: Handle<Image>,
+    #[texture(6, sample_type = "u_int")]
+    prev_player_index: Handle<Image>,
+    #[texture(7)]
+    next_coordinates: Handle<Image>,
+    #[texture(8, sample_type = "u_int")]
+    next_player_index: Handle<Image>,
 }
 
 impl Material for CustomMaterial {
@@ -397,10 +402,10 @@ impl Material for CustomMaterial {
         // AlphaMode::Mask(1.0)
     }
     fn specialize(
-        pipeline: &bevy::pbr::MaterialPipeline<Self>,
+        _pipeline: &bevy::pbr::MaterialPipeline<Self>,
         descriptor: &mut bevy_render::render_resource::RenderPipelineDescriptor,
         layout: &bevy_render::mesh::MeshVertexBufferLayout,
-        key: bevy::pbr::MaterialPipelineKey<Self>,
+        _key: bevy::pbr::MaterialPipelineKey<Self>,
     ) -> Result<(), bevy_render::render_resource::SpecializedMeshPipelineError> {
         // descriptor.primitive.polygon_mode = PolygonMode::Line;
         descriptor.primitive.cull_mode = None;

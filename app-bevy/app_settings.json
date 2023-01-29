@@ -1,7 +1,7 @@
 {
   "ui_mode": "Dock",
   "kinect_enabled": true,
-  "kinect_static_frame": "kinect_framebuffers2.json",
+  "kinect_static_frame asdf": "kinect_framebuffers.json",
   "vr_input_enabled": false,
   "camera2_vmc_enabled": true,
   "history_buffer_size": 2,

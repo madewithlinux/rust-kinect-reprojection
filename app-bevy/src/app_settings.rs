@@ -22,8 +22,11 @@ pub struct AppSettings {
     pub vr_input_enabled: bool,
     pub camera2_vmc_enabled: bool,
     // individual plugin options
+    /// deprecated
     pub history_buffer_size: usize,
     pub fixed_delay_ms: i64,
+    pub depth_texture_do_lookback: bool,
+    pub depth_texture_do_lookahead: bool,
     // debugging options
     pub show_debug_axes: bool,
     pub show_debug_entities: bool,
@@ -41,6 +44,8 @@ impl Default for AppSettings {
             camera2_vmc_enabled: true,
             history_buffer_size: 2,
             fixed_delay_ms: 500,
+            depth_texture_do_lookback: true,
+            depth_texture_do_lookahead: true,
             show_debug_axes: true,
             show_debug_entities: true,
             show_debug_skeleton: true,

@@ -1,12 +1,12 @@
 use std::f32::consts::PI;
-use std::io::{Read, Write};
+use std::io::Write;
 
 use bevy::{math::Affine3A, prelude::*};
 use iyes_loopless::prelude::*;
 
 use serde::{Deserialize, Serialize};
-use tracing::{info, span};
-use tracing::{instrument, Level};
+use tracing::info;
+use tracing::instrument;
 
 use kinect1::{
     skeleton::{SkeletonFrame, SkeletonPositionData, SkeletonPositionTrackingState},
@@ -15,13 +15,15 @@ use kinect1::{
 
 use crate::app_settings::use_kinect_static_frame;
 use crate::delay_buffer::query_performance_counter_ms;
+use crate::util::read_from_json_file;
 use crate::{
     app_settings::{kinect_enabled, AppSettings},
     delay_buffer::DelayBuffer,
-    COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH, FIXED_DELAY_MS,
+    COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH,
 };
 
-pub struct KinectReceiver(pub FrameMessageReceiver, pub DelayBuffer<FrameMessage>);
+// pub struct KinectReceiver(pub FrameMessageReceiver, pub DelayBuffer<FrameMessage>);
+pub struct KinectReceiver(pub FrameMessageReceiver);
 
 // TODO: put this stuff in AppSettings as well?
 #[derive(Resource, Debug, Default, Clone, Reflect)]
@@ -120,17 +122,14 @@ impl KinectDepthTransformer {
 
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct KinectFrameBuffers {
+    pub timestamp: i64,
     // viewable buffers
     pub rgba: Vec<[u8; 4]>,
-    // these ones may be derived values (if config.history_buffer_size > 1)
     pub depth: Vec<u16>,
     pub player_index: Vec<u8>,
     pub skeleton_points: Vec<Vec3>,
     #[serde(skip)]
     pub skeleton_frame: SkeletonFrame,
-    // non-viewable data
-    #[serde(skip)]
-    pub frame_history: std::collections::VecDeque<FrameMessage>,
 }
 
 impl Default for KinectFrameBuffers {
@@ -138,87 +137,59 @@ impl Default for KinectFrameBuffers {
         let width = COLOR_WIDTH;
         let height = COLOR_HEIGHT;
         Self {
+            timestamp: 0,
             rgba: vec![Default::default(); width * height],
             depth: vec![Default::default(); width * height],
             player_index: vec![Default::default(); width * height],
             skeleton_points: vec![Default::default(); width * height],
             skeleton_frame: Default::default(),
-            frame_history: Default::default(),
         }
     }
 }
 
+#[derive(Resource, Clone, Default)]
+pub struct KinectFrameDataDelayBufferV2(pub DelayBuffer<KinectFrameBuffers>);
+
 fn receive_kinect_current_frame(
-    mut receiver: NonSendMut<KinectReceiver>,
+    receiver: NonSend<KinectReceiver>,
     mut buffers: ResMut<KinectFrameBuffers>,
+    mut frame_delay_buffer: ResMut<KinectFrameDataDelayBufferV2>,
     settings: Res<AppSettings>,
 ) {
     while let Ok(received_frame) = receiver.0.try_recv() {
-        receiver.1.push_for_timestamp(
-            received_frame
-                .depth_frame_info
-                .timestamp
-                .max(received_frame.color_frame_info.timestamp),
-            received_frame,
-        );
+        let frame_data = frame_message_to_frame_data_v2(received_frame);
+        frame_delay_buffer
+            .0
+            .push_for_timestamp(frame_data.timestamp, frame_data);
     }
-    if let Some(received_frame) = receiver.1.pop_for_delay(FIXED_DELAY_MS) {
-        process_received_frame(received_frame, &mut buffers, &settings);
+    if let Some(frame_data) = frame_delay_buffer.0.pop_for_delay(settings.fixed_delay_ms) {
+        *buffers = frame_data;
     }
 }
 
 #[instrument(skip_all)]
-fn process_received_frame(received_frame: FrameMessage, buffers: &mut KinectFrameBuffers, settings: &AppSettings) {
-    {
-        let span = span!(Level::INFO, "copy");
-        let _enter = span.enter();
-        buffers.rgba.copy_from_slice(&received_frame.rgba);
-        buffers.depth.copy_from_slice(&received_frame.depth);
-        buffers.player_index.copy_from_slice(&received_frame.player_index);
-        buffers.skeleton_points.copy_from_slice(&received_frame.skeleton_points);
-        buffers.skeleton_frame = received_frame.skeleton_frame.clone();
-    }
-
-    buffers.frame_history.push_front(received_frame);
-    while buffers.frame_history.len() > settings.history_buffer_size.max(1) {
-        buffers.frame_history.pop_back();
-    }
-    if buffers.frame_history.len() <= 1 {
-        return;
-    }
-
-    let span = span!(Level::INFO, "historic_frames");
-    let _enter = span.enter();
-    for historic_frame in buffers.frame_history.iter() {
-        for (i, &depth) in historic_frame.depth.iter().enumerate() {
-            if depth == 0 {
-                continue;
-            }
-            if buffers.depth[i] == 0 {
-                buffers.depth[i] = depth;
-                buffers.player_index[i] = historic_frame.player_index[i];
-                buffers.skeleton_points[i] = historic_frame.skeleton_points[i];
-            }
-        }
-        // TODO: should we terminate the loop through historic buffers if no changes were made?
+fn frame_message_to_frame_data_v2(received_frame: FrameMessage) -> KinectFrameBuffers {
+    KinectFrameBuffers {
+        timestamp: received_frame
+            .depth_frame_info
+            .timestamp
+            .max(received_frame.color_frame_info.timestamp),
+        rgba: received_frame.rgba,
+        depth: received_frame.depth,
+        player_index: received_frame.player_index,
+        skeleton_points: received_frame.skeleton_points,
+        skeleton_frame: received_frame.skeleton_frame,
     }
 }
 
 fn setup_kinect_receiver(world: &mut World) {
     let receiver = start_frame_thread2();
-    world.insert_non_send_resource(KinectReceiver(receiver, Default::default()));
-}
-
-pub fn save_framebuffers_to_file(buffers: &KinectFrameBuffers, file_path: impl AsRef<std::path::Path>) {
-    let s = serde_json::to_string(buffers).unwrap();
-    std::fs::File::create(file_path)
-        .unwrap()
-        .write_all(s.as_bytes())
-        .unwrap();
+    world.insert_non_send_resource(KinectReceiver(receiver));
 }
 
 fn static_frame_system(
     mut buffers: ResMut<KinectFrameBuffers>,
+    mut frame_delay_buffer: ResMut<KinectFrameDataDelayBufferV2>,
     settings: Res<AppSettings>,
     mut static_frame: Local<Option<KinectFrameBuffers>>,
     mut last_update_ms: Local<i64>,
@@ -228,13 +199,7 @@ fn static_frame_system(
     };
     if static_frame.is_none() {
         info!("reading framebuffers from {:?}", static_frame_path);
-        let mut s = String::new();
-        std::fs::File::open(&static_frame_path)
-            .unwrap()
-            .read_to_string(&mut s)
-            .unwrap();
-        *static_frame = Some(serde_json::from_str(&s).unwrap());
-
+        *static_frame = Some(read_from_json_file(static_frame_path));
         info!("finished reading framebuffers from {:?}", static_frame_path);
     }
     let Some(static_frame) = &*static_frame else {
@@ -244,6 +209,10 @@ fn static_frame_system(
     let target_update_delay = (30.0 / 1000.0) as i64;
     if current_ms > *last_update_ms + target_update_delay {
         *buffers = static_frame.clone();
+        frame_delay_buffer.0.push_for_timestamp(
+            current_ms - settings.fixed_delay_ms + target_update_delay,
+            static_frame.clone(),
+        );
         *last_update_ms = current_ms;
     }
 }
@@ -254,6 +223,7 @@ impl Plugin for KinectReceiverPlugin {
         app //
             .insert_resource(KinectDepthTransformer::new())
             .insert_resource(KinectFrameBuffers::default())
+            .insert_resource(KinectFrameDataDelayBufferV2::default())
             .add_startup_system(
                 setup_kinect_receiver
                     .run_if(kinect_enabled)

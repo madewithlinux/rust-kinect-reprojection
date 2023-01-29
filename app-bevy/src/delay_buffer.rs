@@ -35,8 +35,12 @@ impl<T> DelayBuffer<T> {
         self.dequeue.push_back((timestamp, value))
     }
 
-    pub fn back(&mut self) -> Option<&T> {
+    pub fn back(&self) -> Option<&T> {
         self.dequeue.back().map(|(_, value)| value)
+    }
+
+    pub fn front(&self) -> Option<&T> {
+        self.dequeue.front().map(|(_, value)| value)
     }
 
     /// pops and returns the newest element in the buffer that is at least `delay` milliseconds old

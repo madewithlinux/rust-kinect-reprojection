@@ -17,9 +17,9 @@ use smooth_bevy_cameras::controllers::orbit::{OrbitCameraBundle, OrbitCameraCont
 use smooth_bevy_cameras::LookTransformPlugin;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
-use crate::receiver::save_framebuffers_to_file;
+use crate::util::write_to_json_file;
 use crate::vr_connector::OpenVrPoseData;
-use crate::{MainCamera, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_WIDTH};
+use crate::{MainCamera, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
 
 pub struct AppUiDockPlugin;
 impl Plugin for AppUiDockPlugin {
@@ -238,7 +238,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
 
     ui.vertical(|ui| {
         if ui.button("save color frame").clicked() {
-            let current_frame = world.resource::<crate::receiver::KinectFrameBuffers>().frame_history[0].clone();
+            let rgba = world.resource::<crate::receiver::KinectFrameBuffers>().rgba.clone();
             pool.spawn(async move {
                 info!("saving color frame");
                 let Some(color_filename) = rfd::FileDialog::new()
@@ -249,20 +249,15 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                         info!("file chooser cancelled");
                         return
                     };
-                let color_frame: ImageBuffer<image::Rgba<u8>, _> = ImageBuffer::from_raw(
-                    current_frame.width as u32,
-                    current_frame.height as u32,
-                    cast_slice(&current_frame.rgba),
-                    // current_frame.rgba,
-                )
-                .unwrap();
+                let color_frame: ImageBuffer<image::Rgba<u8>, _> =
+                    ImageBuffer::from_raw(COLOR_WIDTH as u32, COLOR_HEIGHT as u32, cast_slice(&rgba)).unwrap();
                 color_frame.save(&color_filename).unwrap();
                 info!("saved {:?}", &color_filename);
             })
             .detach();
         }
         if ui.button("save depth frame").clicked() {
-            let current_frame = world.resource::<crate::receiver::KinectFrameBuffers>().frame_history[0].clone();
+            let depth = world.resource::<crate::receiver::KinectFrameBuffers>().depth.clone();
             pool.spawn(async move {
                 info!("saving depth frame");
                 let Some(depth_filename) = rfd::FileDialog::new()
@@ -273,12 +268,8 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                         info!("file chooser cancelled");
                         return
                     };
-                let depth_frame: ImageBuffer<Luma<u16>, Vec<u16>> = ImageBuffer::from_vec(
-                    current_frame.width as u32,
-                    current_frame.height as u32,
-                    current_frame.depth,
-                )
-                .unwrap();
+                let depth_frame: ImageBuffer<Luma<u16>, Vec<u16>> =
+                    ImageBuffer::from_vec(DEPTH_WIDTH as u32, DEPTH_HEIGHT as u32, depth).unwrap();
                 depth_frame.save(&depth_filename).unwrap();
                 info!("saved {:?}", &depth_filename);
             })
@@ -296,7 +287,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                         info!("file chooser cancelled");
                         return
                     };
-                save_framebuffers_to_file(&buffers, &file_path);
+                write_to_json_file(&buffers, &file_path);
                 info!("saved {:?}", &file_path);
             })
             .detach();
@@ -309,22 +300,19 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
             .striped(true)
             .show(ui, |ui| {
                 let buffers = &world.resource::<crate::receiver::KinectFrameBuffers>();
-                if buffers.frame_history.len() < 2 {
+                let frame_delay_buffer = &world.resource::<crate::receiver::KinectFrameDataDelayBufferV2>().0;
+                if buffers.timestamp == 0 || frame_delay_buffer.front().is_none() {
                     return;
                 }
-                let depth_timestamp = buffers.frame_history[0].depth_frame_info.timestamp;
+                let frame_timestamp = buffers.timestamp;
+                let next_frame_timestamp = &frame_delay_buffer.front().unwrap().timestamp;
 
                 ui.label("depth_timestamp");
-                reflect_inspector::ui_for_value_readonly(&depth_timestamp, ui, type_registry);
+                reflect_inspector::ui_for_value_readonly(&frame_timestamp, ui, type_registry);
                 ui.end_row();
 
                 ui.label("depth frame diff");
-                reflect_inspector::ui_for_value_readonly(
-                    &(buffers.frame_history[0].depth_frame_info.timestamp
-                        - buffers.frame_history[1].depth_frame_info.timestamp),
-                    ui,
-                    type_registry,
-                );
+                reflect_inspector::ui_for_value_readonly(&(frame_timestamp - next_frame_timestamp), ui, type_registry);
                 ui.end_row();
 
                 ui.label("performance_counter");
@@ -340,7 +328,7 @@ fn ui_controls(ui: &mut egui::Ui, world: &mut World, type_registry: &TypeRegistr
                 reflect_inspector::ui_for_value_readonly(&millis, ui, type_registry);
                 ui.end_row();
                 ui.label("performance_counter diff");
-                reflect_inspector::ui_for_value_readonly(&(millis - depth_timestamp), ui, type_registry);
+                reflect_inspector::ui_for_value_readonly(&(millis - frame_timestamp), ui, type_registry);
                 ui.end_row();
             });
 
