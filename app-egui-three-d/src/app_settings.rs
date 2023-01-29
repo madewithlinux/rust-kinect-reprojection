@@ -1,5 +1,6 @@
-use std::io::Read;
 use serde::{Deserialize, Serialize};
+use std::io::Read;
+use three_d::Vec3;
 
 use crate::util::default;
 
@@ -57,4 +58,18 @@ impl AppSettings {
             .unwrap();
         serde_json::from_str(&s).unwrap()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct AppState {
+    // TODO: maybe move this into the OrbitCamera struct directly?
+    // camera
+    pub camera_position: Vec3,
+    pub camera_target: Vec3,
+    pub camera_up: Vec3,
+    pub camera_fov_deg: f32,
+    pub camera_z_near: f32,
+    pub camera_z_far: f32,
+    // orbit camera
+    pub orbit_drag_speed: f32
 }

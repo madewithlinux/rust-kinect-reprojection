@@ -1,19 +1,34 @@
 use three_d::*;
 
-/// similar to theee-d OrbitControl, but with customizable speed
+use crate::app_settings::AppState;
+
+/// similar to theee-d OrbitControl, but with customizable speed. and encapsulates the camera itself
 #[derive(Debug)]
-pub struct CameraOrbitControl {
+pub struct OrbitCamera {
+    pub camera: Camera,
     control: CameraControl,
     drag_speed: f32,
 }
 
-impl CameraOrbitControl {
+impl OrbitCamera {
     /// Creates a new orbit control with the given target and minimum and maximum distance to the target.
-    pub fn new(target: Vec3, min_distance: f32, max_distance: f32) -> Self {
+    pub fn new(
+        viewport: Viewport,
+        position: Vec3,
+        target: Vec3,
+        up: Vec3,
+        field_of_view_y: impl Into<Radians>,
+        z_near: f32,
+        z_far: f32,
+        // target: Vec3,
+        min_distance: f32,
+        max_distance: f32,
+    ) -> Self {
         Self {
+            camera: Camera::new_perspective(viewport, position, target, up, field_of_view_y, z_near, z_far),
             control: CameraControl {
-                left_drag_horizontal: CameraAction::OrbitLeft { target, speed: 0.5 },
-                left_drag_vertical: CameraAction::OrbitUp { target, speed: 0.5 },
+                left_drag_horizontal: CameraAction::OrbitLeft { target, speed: 0.05 },
+                left_drag_vertical: CameraAction::OrbitUp { target, speed: 0.05 },
                 scroll_vertical: CameraAction::Zoom {
                     min: min_distance,
                     max: max_distance,
@@ -34,21 +49,15 @@ impl CameraOrbitControl {
             _ => (),
         }
     }
-    pub fn get_orbit_drag_speed(&self) -> f32 {
-        self.drag_speed
-    }
-    pub fn set_orbit_drag_speed(&mut self, drag_speed: f32) {
+
+    fn set_orbit_drag_speed(&mut self, drag_speed: f32) {
         self.drag_speed = drag_speed;
         Self::set_orbit_speed(&mut self.control.left_drag_horizontal, drag_speed);
         Self::set_orbit_speed(&mut self.control.left_drag_vertical, drag_speed);
     }
 
-    pub fn on_gui_changed(&mut self, camera: &Camera) {
-        set_camera_control_target(&mut self.control, *camera.target());
-    }
-
     /// Handles the events. Must be called each frame.
-    pub fn handle_events(&mut self, camera: &mut Camera, events: &mut [Event]) -> bool {
+    pub fn handle_events(&mut self, events: &mut [Event]) -> bool {
         if let CameraAction::Zoom {
             speed,
             target,
@@ -56,10 +65,31 @@ impl CameraOrbitControl {
             max,
         } = &mut self.control.scroll_vertical
         {
-            let x = target.distance(*camera.position());
+            let x = target.distance(*self.camera.position());
             *speed = 0.5 * smoothstep(*min, *max, x) + 0.001;
         }
-        self.control.handle_events(camera, events)
+        self.control.handle_events(&mut self.camera, events)
+    }
+
+    pub fn write_to_state(&self, state: &mut AppState) {
+        state.camera_position = *self.camera.position();
+        state.camera_target = *self.camera.target();
+        state.camera_up = *self.camera.up();
+    }
+
+    pub fn read_from_state(&mut self, state: &AppState) {
+        self.camera.set_view(
+            state.camera_position,
+            state.camera_target,
+            state.camera_up,
+        );
+        self.camera.set_perspective_projection(
+            degrees(state.camera_fov_deg),
+            state.camera_z_near,
+            state.camera_z_far,
+        );
+        set_camera_control_target(&mut self.control, *self.camera.target());
+        self.set_orbit_drag_speed(state.orbit_drag_speed);
     }
 }
 
