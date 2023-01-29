@@ -1,5 +1,5 @@
 use three_d::{
-    egui::{DragValue, Grid, Slider, Ui},
+    egui::{DragValue, Grid, Response, Slider, Ui},
     *,
 };
 
@@ -91,21 +91,19 @@ impl<'a> GuiWindowContent<'a> {
     pub fn camera_info(&mut self, ui: &mut Ui) {
         Grid::new("camera grid").striped(true).show(ui, |ui| {
             ui.label("position");
-            *self.changed |= vec3_edit_mut(ui, &mut self.state.camera_position);
+            *self.changed |= self.state.camera_position.gui_edit(ui).changed();
             ui.end_row();
 
             ui.label("target");
-            *self.changed |= vec3_edit_mut(ui, &mut self.state.camera_target);
+            *self.changed |= self.state.camera_target.gui_edit(ui).changed();
             ui.end_row();
 
             ui.label("up");
-            *self.changed |= vec3_edit_mut(ui, &mut self.state.camera_up);
+            *self.changed |= self.state.camera_up.gui_edit(ui).changed();
             ui.end_row();
 
             ui.label("fov");
-            *self.changed |= ui
-                .add(DragValue::new(&mut self.state.camera_fov_deg).speed(DEFAULT_SPEED))
-                .changed();
+            *self.changed |= self.state.camera_fov_deg.gui_edit(ui).changed();
             ui.end_row();
         });
     }
@@ -113,28 +111,23 @@ impl<'a> GuiWindowContent<'a> {
 
 pub const DEFAULT_SPEED: f32 = 0.1;
 
-pub fn vec3_edit(ui: &mut Ui, input: &Vec3) -> Option<Vec3> {
-    let mut value = *input;
-    let mut changed = false;
-    ui.columns(3, |uis| {
-        changed |= uis[0].add(DragValue::new(&mut value.x).speed(DEFAULT_SPEED)).changed();
-        changed |= uis[1].add(DragValue::new(&mut value.y).speed(DEFAULT_SPEED)).changed();
-        changed |= uis[2].add(DragValue::new(&mut value.z).speed(DEFAULT_SPEED)).changed();
-    });
-    if changed {
-        // dbg!("changed", input, value);
-        Some(value)
-    } else {
-        None
+pub trait GuiEditable {
+    fn gui_edit(&mut self, ui: &mut Ui) -> Response;
+}
+
+impl GuiEditable for f32 {
+    fn gui_edit(&mut self, ui: &mut Ui) -> Response {
+        ui.add(DragValue::new(self).speed(DEFAULT_SPEED))
     }
 }
 
-pub fn vec3_edit_mut(ui: &mut Ui, value: &mut Vec3) -> bool {
-    ui.columns(3, |uis| {
-        let mut changed = false;
-        changed |= uis[0].add(DragValue::new(&mut value.x).speed(DEFAULT_SPEED)).changed();
-        changed |= uis[1].add(DragValue::new(&mut value.y).speed(DEFAULT_SPEED)).changed();
-        changed |= uis[2].add(DragValue::new(&mut value.z).speed(DEFAULT_SPEED)).changed();
-        changed
-    })
+impl<S: GuiEditable + three_d::egui::emath::Numeric> GuiEditable for Vector3<S> {
+    fn gui_edit(&mut self, ui: &mut Ui) -> Response {
+        ui.columns(3, |uis| {
+            let mut response = self.x.gui_edit(&mut uis[0]);
+            response |= self.y.gui_edit(&mut uis[1]);
+            response |= self.z.gui_edit(&mut uis[2]);
+            response
+        })
+    }
 }
