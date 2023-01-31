@@ -80,20 +80,24 @@ pub fn app_main() {
         });
     match settings.ui_mode {
         UiMode::Game => {
-            app.add_plugin(game_ui::AppUiGamePlugin);
+            app.add_plugin(game_ui::AppUiGamePlugin)
+                .insert_resource(Msaa { samples: 1 });
         }
         UiMode::Dock => {
-            app.add_plugin(dock_ui::AppUiDockPlugin);
+            app
+                // third-party plugins
+                // .add_plugin(DebugLinesPlugin::default())
+                // app plugins
+                .add_plugin(dock_ui::AppUiDockPlugin)
+                // .add_plugin(frame_display::FrameDisplayPlugin)
+                // .add_plugin(point_cloud::PointCloudPlugin)
+                .add_plugin(debug_coordinates::DebugCoordinatesPlugin)
+                .add_plugin(vr_connector::VrConnectorPlugin);
         }
     }
     app //
         .add_plugin(receiver::KinectReceiverPlugin)
-        // .add_plugin(frame_display::FrameDisplayPlugin)
-        // .add_plugin(point_cloud::PointCloudPlugin)
         .add_plugin(depth_texture::DepthTexturePlugin)
-        .add_plugin(debug_coordinates::DebugCoordinatesPlugin)
-        // .add_plugin(dock_ui::AppUiDockPlugin)
-        .add_plugin(vr_connector::VrConnectorPlugin)
         .add_plugin(camera2_vmc_osc_receiver::OscReceiverPlugin)
         .register_type::<MainCamera>()
         .register_type::<frame_visualization_util::FrameBufferImageHandle>()
