@@ -253,14 +253,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy-aabb-instancing"
-version = "0.7.0"
-source = "git+https://github.com/foresightminingsoftwarecorporation/bevy-aabb-instancing#fdb22b96dd3bc0c98430221c425fa83fc5ad001b"
-dependencies = [
- "bevy",
-]
-
-[[package]]
 name = "bevy-inspector-egui"
 version = "0.16.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3676,7 +3668,6 @@ dependencies = [
  "anyhow",
  "array2d",
  "bevy",
- "bevy-aabb-instancing",
  "bevy-inspector-egui",
  "bevy_asset",
  "bevy_egui",

@@ -5,6 +5,8 @@ use bevy::prelude::*;
 
 use serde::{Deserialize, Serialize};
 
+use crate::{COLOR_WIDTH, COLOR_HEIGHT};
+
 #[derive(Default, Debug, Clone, Reflect, Serialize, Deserialize)]
 pub enum UiMode {
     Game,
@@ -16,17 +18,26 @@ pub enum UiMode {
 #[reflect(Debug, Resource)]
 #[serde(default)]
 pub struct AppSettings {
+    // window/system settings
     pub ui_mode: UiMode,
+    pub window_title: String,
+    pub window_width: f32,
+    pub window_height: f32,
+    pub window_resizable: bool,
+    pub min_total_threads: usize,
+    pub max_total_threads: usize,
+    pub greenscreen: bool,
     // enabled plugins
     pub kinect_enabled: bool,
     pub vr_input_enabled: bool,
     pub camera2_vmc_enabled: bool,
-    // individual plugin options
     /// deprecated
     pub history_buffer_size: usize,
+    // individual plugin options
     pub fixed_delay_ms: i64,
     pub depth_texture_do_lookback: bool,
     pub depth_texture_do_lookahead: bool,
+    pub depth_texture_always_use_player_index: bool,
     // debugging options
     pub show_debug_axes: bool,
     pub show_debug_entities: bool,
@@ -39,13 +50,24 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             ui_mode: default(),
+            window_title: "Kinect Reprojection".to_string(),
+            window_width: (COLOR_WIDTH as f32) * 2.0,
+            window_height: (COLOR_HEIGHT as f32) + 400.0,
+            window_resizable: true,
+            min_total_threads: 0,
+            max_total_threads: 0,
+            greenscreen: false,
+
             kinect_enabled: true,
             vr_input_enabled: true,
             camera2_vmc_enabled: true,
+
             history_buffer_size: 2,
             fixed_delay_ms: 500,
             depth_texture_do_lookback: true,
             depth_texture_do_lookahead: true,
+            depth_texture_always_use_player_index: false,
+
             show_debug_axes: true,
             show_debug_entities: true,
             show_debug_skeleton: true,

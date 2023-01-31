@@ -1,6 +1,7 @@
 use app_settings::{AppSettings, UiMode};
 use bevy::prelude::*;
 use bevy_prototype_debug_lines::DebugLinesPlugin;
+use itertools::Itertools;
 
 pub mod app_settings;
 pub mod camera2_vmc_osc_receiver;
@@ -10,7 +11,7 @@ pub mod depth_texture;
 pub mod dock_ui;
 pub mod frame_visualization_util;
 pub mod game_ui;
-pub mod point_cloud;
+// pub mod point_cloud;
 pub mod receiver;
 mod util;
 pub mod vr_connector;
@@ -21,14 +22,34 @@ pub const COLOR_HEIGHT: usize = 480;
 pub const DEPTH_WIDTH: usize = 640;
 pub const DEPTH_HEIGHT: usize = 480;
 
-/// TODO: use AppSettings fixed_delay_ms instead of this
-pub const FIXED_DELAY_MS: i64 = 500;
-
 #[derive(Component, Reflect)]
 pub struct MainCamera;
 
 pub fn app_main() {
-    let settings = AppSettings::read_from_file("app_settings.json");
+    let args = std::env::args().collect_vec();
+    let app_settings_path = if args.len() == 2 {
+        args[1].clone()
+    } else {
+        "app_settings.json".to_owned()
+    };
+    let settings = AppSettings::read_from_file(app_settings_path);
+
+    let task_pool_options = {
+        let mut task_pool_options = TaskPoolOptions::default();
+        if settings.min_total_threads > 0 {
+            task_pool_options.min_total_threads = settings.min_total_threads;
+        }
+        if settings.max_total_threads > 0 {
+            task_pool_options.max_total_threads = settings.max_total_threads;
+        }
+        task_pool_options
+    };
+
+    let clear_color = if settings.greenscreen {
+        ClearColor(Color::GREEN)
+    } else {
+        ClearColor::default()
+    };
 
     let mut app = App::new();
     app //
@@ -36,9 +57,10 @@ pub fn app_main() {
             DefaultPlugins
                 .set(WindowPlugin {
                     window: WindowDescriptor {
-                        title: "Kinect Reprojection".to_string(),
-                        width: (COLOR_WIDTH as f32) * 2.0,
-                        height: (COLOR_HEIGHT as f32) + 400.0,
+                        title: settings.window_title.clone(),
+                        width: settings.window_width,
+                        height: settings.window_height,
+                        resizable: settings.window_resizable,
                         ..default()
                     },
                     ..default()
@@ -48,6 +70,8 @@ pub fn app_main() {
                     ..default()
                 }),
         )
+        .insert_resource(task_pool_options)
+        .insert_resource(clear_color)
         .add_plugin(DebugLinesPlugin::default())
         .add_plugin(bevy_framepace::FramepacePlugin)
         // .add_plugin(app_settings::AppSettingsPlugin::new("app_settings.json"))

@@ -67,6 +67,7 @@ use winresult::{HResult, HResultError};
 mod hresult_helper;
 pub mod skeleton;
 pub mod worker_v2;
+mod coordinate_mapper_test;
 
 #[derive(Error, Debug)]
 pub enum KinectError {

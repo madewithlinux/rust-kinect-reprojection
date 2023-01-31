@@ -7,10 +7,9 @@ use bevy_prototype_debug_lines::DebugLines;
 use openvr::TrackingResult;
 
 use crate::{
-    app_settings::{debug_axes_enabled, vr_input_enabled},
+    app_settings::{debug_axes_enabled, vr_input_enabled, AppSettings},
     delay_buffer::{query_performance_counter_ms, DelayBuffer},
     util::draw_debug_axes,
-    FIXED_DELAY_MS,
 };
 
 pub struct OpenVrContextSystem(openvr::Context, openvr::System);
@@ -67,6 +66,7 @@ fn update_pose_data(
     mut delayed_pose_data: ResMut<OpenVrPoseData>,
     open_vr_context_system: NonSend<OpenVrContextSystem>,
     mut pose_data_buffer: Local<DelayBuffer<OpenVrPoseData>>,
+    settings: Res<AppSettings>,
 ) {
     let timestamp = query_performance_counter_ms();
 
@@ -106,7 +106,7 @@ fn update_pose_data(
         }
     }
     pose_data_buffer.push_for_timestamp(timestamp, pose_data);
-    if let Some(pd) = pose_data_buffer.pop_for_delay(FIXED_DELAY_MS) {
+    if let Some(pd) = pose_data_buffer.pop_for_delay(settings.fixed_delay_ms) {
         *delayed_pose_data = pd;
     }
     // *delayed_pose_data = pose_data_buffer.pop_for_delay(FIXED_DELAY_MS).unwrap_or_default();

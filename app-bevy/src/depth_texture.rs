@@ -347,7 +347,8 @@ fn update_custom_depth_texture(
 
     // if there's any player index detected, then tell the shader to use the player index
     let any_nonzero_player_index = player_indexes.iter().any(|player_index| *player_index > 0);
-    material.uniforms.use_player_index_mask = any_nonzero_player_index as u32;
+    material.uniforms.use_player_index_mask =
+        (settings.depth_texture_always_use_player_index || any_nonzero_player_index) as u32;
     material.uniforms.point_transform_matrix = depth_transformer.point_transform_matrix.into();
     material.uniforms.do_lookback = settings.depth_texture_do_lookback as u32;
     material.uniforms.do_lookahead = settings.depth_texture_do_lookahead as u32;
