@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::math::Affine3A;
 use bevy::prelude::*;
 use bevy_osc::{Osc, OscEvent, OscSettings};
@@ -31,7 +33,6 @@ struct CameraReceiverBuffer(DelayBuffer<VmcCameraInfo>);
 pub struct OscReceiverPlugin;
 impl Plugin for OscReceiverPlugin {
     fn build(&self, app: &mut App) {
-        // TODO: how to enable/disable the OSC from here?
         app //
             .add_plugin(Osc)
             .insert_resource(OscSettings {
@@ -41,12 +42,28 @@ impl Plugin for OscReceiverPlugin {
             })
             .insert_resource(CameraReceiverBuffer::default())
             .add_system(osc_event_listener_system.run_if(camera2_vmc_enabled))
+            .add_system(osc_transform_watcher.run_if(camera2_vmc_enabled))
             // .register_type()
             ;
     }
 }
 
 const CAMERA2_VMC_ADDR: &str = "/VMC/Ext/Cam";
+
+fn osc_transform_watcher(
+    mut receive_buffer: ResMut<CameraReceiverBuffer>,
+    settings: Res<AppSettings>,
+    mut camera_query: Query<(&mut Transform, &mut Projection), With<VmcCameraMarker>>,
+) {
+    let Some(vmc_camera_info) = receive_buffer.0.pop_for_delay(settings.fixed_delay_ms) else { return; };
+    let (mut transform, mut projection) = camera_query.single_mut();
+    *transform = Transform::from_translation(vmc_camera_info.translation).with_rotation(vmc_camera_info.rotation);
+    *projection = PerspectiveProjection {
+        fov: vmc_camera_info.fov * PI / 180.0,
+        ..default()
+    }
+    .into();
+}
 
 fn osc_event_listener_system(
     mut events: EventReader<OscEvent>,
