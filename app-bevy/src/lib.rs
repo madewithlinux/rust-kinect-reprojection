@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use app_settings::{AppSettings, UiMode};
 use bevy::prelude::*;
 use bevy_prototype_debug_lines::DebugLinesPlugin;
@@ -61,6 +63,7 @@ pub fn app_main() {
                         width: settings.window_width,
                         height: settings.window_height,
                         resizable: settings.window_resizable,
+                        scale_factor_override: settings.window_scale_factor_override,
                         ..default()
                     },
                     ..default()
@@ -74,19 +77,25 @@ pub fn app_main() {
         .insert_resource(clear_color)
         .add_plugin(DebugLinesPlugin::default())
         .add_plugin(bevy_framepace::FramepacePlugin)
-        // .add_plugin(app_settings::AppSettingsPlugin::new("app_settings.json"))
         .add_plugin(app_settings::AppSettingsPlugin {
             initial_settings: settings.clone(),
         });
+
+    if let Some(framerate_limit) = settings.framerate_limit {
+        app.insert_resource(bevy_framepace::FramepaceSettings {
+            limiter: bevy_framepace::Limiter::Manual(Duration::from_secs(1) / framerate_limit),
+        });
+    }
+
     match settings.ui_mode {
         UiMode::Game => {
-            app.add_plugin(game_ui::AppUiGamePlugin)
-                .insert_resource(Msaa { samples: 1 });
+            app.insert_resource(Msaa { samples: 1 })
+                // .add_plugin(game_ui::AppUiGamePlugin)
+                // we don't need the whole game UI, just the camera
+                .add_startup_system(game_ui::spawn_3d_camera);
         }
         UiMode::Dock => {
             app
-                // third-party plugins
-                // .add_plugin(DebugLinesPlugin::default())
                 // app plugins
                 .add_plugin(dock_ui::AppUiDockPlugin)
                 // .add_plugin(frame_display::FrameDisplayPlugin)

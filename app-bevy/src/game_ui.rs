@@ -24,7 +24,6 @@ impl Plugin for AppUiGamePlugin {
             .add_plugin(DefaultInspectorConfigPlugin)
             .add_plugin(bevy_egui::EguiPlugin)
             .add_startup_system(spawn_3d_camera)
-            .register_type::<FrameBufferImageHandle>()
             .add_startup_system(setup_create_new_window)
             // .add_system(keyboard_shortcut_create_new_window_system)
             // .add_system_to_stage(CoreStage::PreUpdate, ui_second_window_system.at_end());
@@ -44,7 +43,7 @@ impl Plugin for AppUiGamePlugin {
     }
 }
 
-fn spawn_3d_camera(mut commands: Commands) {
+pub fn spawn_3d_camera(mut commands: Commands) {
     commands.spawn((
         MainCamera,
         VmcCameraMarker,

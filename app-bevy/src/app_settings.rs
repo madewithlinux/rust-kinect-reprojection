@@ -24,9 +24,11 @@ pub struct AppSettings {
     pub window_width: f32,
     pub window_height: f32,
     pub window_resizable: bool,
+    pub window_scale_factor_override: Option<f64>,
     pub min_total_threads: usize,
     pub max_total_threads: usize,
     pub greenscreen: bool,
+    pub framerate_limit: Option<u32>,
     // enabled plugins
     pub kinect_enabled: bool,
     pub vr_input_enabled: bool,
@@ -54,9 +56,11 @@ impl Default for AppSettings {
             window_width: (COLOR_WIDTH as f32) * 2.0,
             window_height: (COLOR_HEIGHT as f32) + 400.0,
             window_resizable: true,
+            window_scale_factor_override: None,
             min_total_threads: 0,
             max_total_threads: 0,
             greenscreen: false,
+            framerate_limit: None,
 
             kinect_enabled: true,
             vr_input_enabled: true,
