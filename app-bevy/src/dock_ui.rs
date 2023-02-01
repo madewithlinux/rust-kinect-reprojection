@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::time::SystemTime;
 
 use bevy::prelude::*;
-use bevy_asset::{HandleId, ReflectAsset};
+use bevy::asset::{HandleId, ReflectAsset};
 use bevy_inspector_egui::bevy_inspector::hierarchy::{hierarchy_ui, SelectedEntities};
 use bevy_inspector_egui::bevy_inspector::{self, ui_for_entities_shared_components};
 use bevy_inspector_egui::{reflect_inspector, DefaultInspectorConfigPlugin};

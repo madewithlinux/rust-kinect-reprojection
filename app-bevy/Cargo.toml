@@ -24,28 +24,13 @@ cfg-if = "1.0.0"
 # bevy = "0.9"
 bevy = { version = "0.9", default-features = false, features = [
     "bevy_asset",
-    "bevy_scene",
-    "bevy_gilrs",
-    "bevy_audio",
     "bevy_winit",
-    "animation",
-    "x11",
-    "filesystem_watcher",
-    "render",
     "bevy_render",
     "bevy_core_pipeline",
-    "bevy_sprite",
     "bevy_pbr",
-    "bevy_gltf",
-    "bevy_text",
-    "bevy_ui",
-    "png",
-    "hdr",
-    "vorbis",
 ] }
 # bevy = { version = "0.9", features = ["dynamic"] }
 bevy_reflect = { version = "0.9" }
-bevy_asset = { version = "0.9" }
 bevy_framepace = "0.11"
 
 bevy_osc = "0.5.0"
@@ -84,5 +69,21 @@ calibration = [
     "egui_dock",
     "rfd",
     "smooth-bevy-cameras",
+    # additional bevy features
+    # "bevy/bevy_scene",
+    # "bevy/bevy_gilrs",
+    # "bevy/bevy_audio",
+    # "bevy/animation",
+    # "bevy/x11",
+    "bevy/filesystem_watcher",
+    "bevy/render",
+    "bevy/bevy_sprite",
+    "bevy/bevy_pbr",
+    "bevy/bevy_gltf",
+    "bevy/bevy_text",
+    "bevy/bevy_ui",
+    "bevy/png",
+    "bevy/hdr",
+    "bevy/vorbis",
 ]
 debug_helpers = ["bevy_prototype_debug_lines"]
