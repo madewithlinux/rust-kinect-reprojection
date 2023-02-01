@@ -2,20 +2,24 @@ use std::time::Duration;
 
 use app_settings::{AppSettings, UiMode};
 use bevy::prelude::*;
-use bevy_prototype_debug_lines::DebugLinesPlugin;
 use itertools::Itertools;
 
 pub mod app_settings;
 pub mod camera2_vmc_osc_receiver;
-pub mod debug_coordinates;
 pub mod delay_buffer;
 pub mod depth_texture;
-pub mod dock_ui;
 pub mod frame_visualization_util;
-pub mod game_ui;
 // pub mod point_cloud;
 pub mod receiver;
 mod util;
+
+#[cfg(feature = "calibration")]
+pub mod debug_coordinates;
+#[cfg(feature = "calibration")]
+pub mod dock_ui;
+#[cfg(feature = "calibration")]
+pub mod game_ui;
+#[cfg(feature = "calibration")]
 pub mod vr_connector;
 
 pub const COLOR_WIDTH: usize = 640;
@@ -75,7 +79,6 @@ pub fn app_main() {
         )
         .insert_resource(task_pool_options)
         .insert_resource(clear_color)
-        .add_plugin(DebugLinesPlugin::default())
         .add_plugin(bevy_framepace::FramepacePlugin)
         .add_plugin(app_settings::AppSettingsPlugin {
             initial_settings: settings.clone(),
@@ -87,14 +90,18 @@ pub fn app_main() {
         });
     }
 
+    #[cfg(feature = "debug_helpers")]
+    app.add_plugin(bevy_prototype_debug_lines::DebugLinesPlugin::default());
+
     match settings.ui_mode {
         UiMode::Game => {
             app.insert_resource(Msaa { samples: 1 })
                 // .add_plugin(game_ui::AppUiGamePlugin)
-                // we don't need the whole game UI, just the camera
-                .add_startup_system(game_ui::spawn_3d_camera);
+                // we don't need the whole game UI, just a camera
+                .add_startup_system(camera2_vmc_osc_receiver::spawn_3d_camera);
         }
         UiMode::Dock => {
+            #[cfg(feature = "calibration")]
             app
                 // app plugins
                 .add_plugin(dock_ui::AppUiDockPlugin)
@@ -102,6 +109,8 @@ pub fn app_main() {
                 // .add_plugin(point_cloud::PointCloudPlugin)
                 .add_plugin(debug_coordinates::DebugCoordinatesPlugin)
                 .add_plugin(vr_connector::VrConnectorPlugin);
+            #[cfg(not(feature = "calibration"))]
+            panic!("calibration/debug UI isn't enabled");
         }
     }
     app //

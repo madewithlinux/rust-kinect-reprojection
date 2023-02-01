@@ -1,10 +1,11 @@
 use std::io::{Read, Write};
 
+#[cfg(feature = "debug_helpers")]
 use bevy::{math::Affine3A, prelude::*};
-use bevy_prototype_debug_lines::DebugLines;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 
-pub(crate) fn draw_debug_axes(lines: &mut DebugLines, transform: &Affine3A, scale: f32) {
+#[cfg(feature = "debug_helpers")]
+pub(crate) fn draw_debug_axes(lines: &mut bevy_prototype_debug_lines::DebugLines, transform: &Affine3A, scale: f32) {
     let origin = transform.transform_point3(Vec3::ZERO);
     let dx = (transform.transform_point3(Vec3::X) - origin).normalize();
     let dy = (transform.transform_point3(Vec3::Y) - origin).normalize();

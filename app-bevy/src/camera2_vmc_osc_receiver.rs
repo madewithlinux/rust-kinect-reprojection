@@ -3,6 +3,7 @@ use std::f32::consts::PI;
 use bevy::math::Affine3A;
 use bevy::prelude::*;
 use bevy_osc::{Osc, OscEvent, OscSettings};
+#[cfg(feature = "debug_helpers")]
 use bevy_prototype_debug_lines::DebugLines;
 use iyes_loopless::prelude::*;
 use nannou_osc::Message;
@@ -13,7 +14,9 @@ use crate::app_settings::camera2_vmc_enabled;
 use crate::app_settings::AppSettings;
 use crate::delay_buffer::query_performance_counter_ms;
 use crate::delay_buffer::DelayBuffer;
+#[cfg(feature = "debug_helpers")]
 use crate::util::draw_debug_axes;
+use crate::MainCamera;
 
 #[derive(Resource, Debug, Default, Clone, Reflect)]
 #[reflect(Debug, Resource)]
@@ -48,6 +51,18 @@ impl Plugin for OscReceiverPlugin {
     }
 }
 
+pub fn spawn_3d_camera(mut commands: Commands) {
+    commands.spawn((
+        MainCamera,
+        VmcCameraMarker,
+        Camera3dBundle {
+            transform: Transform::from_translation(Vec3::new(0.5, 3.6, 2.6))
+                .looking_at(Vec3::new(0.0, 0.0, -0.8), Vec3::Y),
+            ..default()
+        },
+    ));
+}
+
 const CAMERA2_VMC_ADDR: &str = "/VMC/Ext/Cam";
 
 fn osc_transform_watcher(
@@ -68,7 +83,7 @@ fn osc_transform_watcher(
 fn osc_event_listener_system(
     mut events: EventReader<OscEvent>,
     mut receive_buffer: ResMut<CameraReceiverBuffer>,
-    mut lines: ResMut<DebugLines>,
+    #[cfg(feature = "debug_helpers")] mut lines: ResMut<DebugLines>,
     settings: Res<AppSettings>,
 ) {
     let timestamp = query_performance_counter_ms();
@@ -87,6 +102,7 @@ fn osc_event_listener_system(
                         // TODO: check if this works
                         let transform =
                             unity_to_bevy_coordinate_system([*xpos, *ypos, *zpos], [*xrot, *yrot, *zrot, *wrot]);
+                        #[cfg(feature = "debug_helpers")]
                         if settings.show_debug_axes {
                             draw_debug_axes(&mut lines, &transform, 0.2);
                         }
