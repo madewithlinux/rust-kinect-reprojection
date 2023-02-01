@@ -140,12 +140,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "array2d"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79093d31d0a9c7832c71ad74dd945b7861f721e6f242aa67be253a5eecbac937"
-
-[[package]]
 name = "arrayvec"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2400,7 +2394,6 @@ dependencies = [
 name = "kinect1"
 version = "0.1.0"
 dependencies = [
- "array2d",
  "bytemuck",
  "crossbeam",
  "enumset",
@@ -3038,7 +3031,6 @@ name = "openvr-test"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "array2d",
  "bytemuck",
  "crossbeam",
  "enumset",
@@ -3463,7 +3455,6 @@ name = "rust-kinect-reprojection-app-bevy"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "array2d",
  "bevy",
  "bevy-inspector-egui",
  "bevy_egui",

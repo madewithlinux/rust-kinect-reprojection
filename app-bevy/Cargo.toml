@@ -10,7 +10,6 @@ kinect1 = { path = "../kinect1" }
 anyhow = "1.0.66"
 thiserror = "1.0"
 image = "0.24.5"
-array2d = "0.3"
 itertools = "0.10.5"
 ordered-float = "3.4.0"
 bytemuck = "1.12.3"
