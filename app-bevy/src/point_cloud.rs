@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_aabb_instancing::{ColorOptions, ColorOptionsMap, Cuboid, Cuboids, VertexPullingRenderPlugin, COLOR_MODE_RGB};
-use bevy_render::primitives::Aabb;
+use bevy::render::primitives::Aabb;
 
 use itertools::{iproduct, Itertools};
 

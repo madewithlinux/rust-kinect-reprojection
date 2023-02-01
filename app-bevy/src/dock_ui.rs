@@ -7,7 +7,7 @@ use bevy_inspector_egui::bevy_inspector::hierarchy::{hierarchy_ui, SelectedEntit
 use bevy_inspector_egui::bevy_inspector::{self, ui_for_entities_shared_components};
 use bevy_inspector_egui::{reflect_inspector, DefaultInspectorConfigPlugin};
 use bevy_reflect::TypeRegistry;
-use bevy_render::camera::Viewport;
+use bevy::render::camera::Viewport;
 use bytemuck::checked::cast_slice;
 use egui::{Pos2, Rect};
 use egui_dock::{NodeIndex, Tree};
@@ -460,14 +460,14 @@ fn get_or_create_frame_buffer_image_handle(
     } else {
         info!("creating image resource for frame buffer {:?}", buffer_name);
         let image_handle = world.resource_mut::<Assets<Image>>().add(Image::new_fill(
-            bevy_render::render_resource::Extent3d {
+            bevy::render::render_resource::Extent3d {
                 width: COLOR_WIDTH as u32,
                 height: COLOR_HEIGHT as u32,
                 depth_or_array_layers: 1,
             },
             bevy::render::render_resource::TextureDimension::D2,
             &[0, 0, 0, 255],
-            bevy_render::render_resource::TextureFormat::Rgba8UnormSrgb,
+            bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
         ));
         world.spawn((
             Name::new(format!("auto:{:?}", buffer_name)),

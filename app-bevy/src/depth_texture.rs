@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_reflect::TypeUuid;
-use bevy_render::{
+use bevy::render::{
     mesh::{Indices, MeshVertexAttribute, VertexAttributeValues},
     primitives::Aabb,
     render_resource::{self, AsBindGroup, PrimitiveTopology, ShaderRef, ShaderType, TextureFormat, VertexFormat},
@@ -39,14 +39,14 @@ fn spawn_depth_texture(
     mut images: ResMut<Assets<Image>>,
 ) {
     let image_handle = images.add(Image::new_fill(
-        bevy_render::render_resource::Extent3d {
+        bevy::render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
             height: COLOR_HEIGHT as u32,
             depth_or_array_layers: 1,
         },
         bevy::render::render_resource::TextureDimension::D2,
         &[0, 0, 0, 255],
-        bevy_render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
     ));
 
     let quad_handle = meshes.add(make_subdivided_quad(DEPTH_WIDTH, DEPTH_HEIGHT, true));
@@ -226,34 +226,34 @@ fn spawn_custom_depth_texture(
     mut images: ResMut<Assets<Image>>,
 ) {
     let rgba_handle = images.add(Image::new_fill(
-        bevy_render::render_resource::Extent3d {
+        bevy::render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
             height: COLOR_HEIGHT as u32,
             depth_or_array_layers: 1,
         },
         bevy::render::render_resource::TextureDimension::D2,
         &[0, 0, 0, 255],
-        bevy_render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
     ));
     let coordinates = Image::new_fill(
-        bevy_render::render_resource::Extent3d {
+        bevy::render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
             height: COLOR_HEIGHT as u32,
             depth_or_array_layers: 1,
         },
         bevy::render::render_resource::TextureDimension::D2,
         cast_slice(&[0.0, 0.0, 0.0, 0.0]),
-        bevy_render::render_resource::TextureFormat::Rgba32Float,
+        bevy::render::render_resource::TextureFormat::Rgba32Float,
     );
     let player_indexes = Image::new_fill(
-        bevy_render::render_resource::Extent3d {
+        bevy::render::render_resource::Extent3d {
             width: COLOR_WIDTH as u32,
             height: COLOR_HEIGHT as u32,
             depth_or_array_layers: 1,
         },
         bevy::render::render_resource::TextureDimension::D2,
         &[0],
-        bevy_render::render_resource::TextureFormat::R8Uint,
+        bevy::render::render_resource::TextureFormat::R8Uint,
     );
     let quad_handle = meshes.add(make_subdivided_quad_with_pixel_coords(DEPTH_WIDTH, DEPTH_HEIGHT));
 
@@ -404,10 +404,10 @@ impl Material for CustomMaterial {
     }
     fn specialize(
         _pipeline: &bevy::pbr::MaterialPipeline<Self>,
-        descriptor: &mut bevy_render::render_resource::RenderPipelineDescriptor,
-        layout: &bevy_render::mesh::MeshVertexBufferLayout,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        layout: &bevy::render::mesh::MeshVertexBufferLayout,
         _key: bevy::pbr::MaterialPipelineKey<Self>,
-    ) -> Result<(), bevy_render::render_resource::SpecializedMeshPipelineError> {
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
         // descriptor.primitive.polygon_mode = PolygonMode::Line;
         descriptor.primitive.cull_mode = None;
         // descriptor.primitive.unclipped_depth = true;
