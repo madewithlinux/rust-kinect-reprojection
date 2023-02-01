@@ -8,6 +8,7 @@ pub mod app_settings;
 pub mod camera2_vmc_osc_receiver;
 pub mod delay_buffer;
 pub mod depth_texture;
+#[cfg(feature = "calibration")]
 pub mod frame_visualization_util;
 // pub mod point_cloud;
 pub mod receiver;
@@ -58,6 +59,10 @@ pub fn app_main() {
     };
 
     let mut app = App::new();
+    #[cfg(feature = "calibration")]
+    let watch_for_changes = true;
+    #[cfg(not(feature = "calibration"))]
+    let watch_for_changes = false;
     app //
         .add_plugins(
             DefaultPlugins
@@ -73,7 +78,7 @@ pub fn app_main() {
                     ..default()
                 })
                 .set(AssetPlugin {
-                    watch_for_changes: true,
+                    watch_for_changes,
                     ..default()
                 }),
         )
@@ -105,7 +110,6 @@ pub fn app_main() {
             app
                 // app plugins
                 .add_plugin(dock_ui::AppUiDockPlugin)
-                // .add_plugin(frame_display::FrameDisplayPlugin)
                 // .add_plugin(point_cloud::PointCloudPlugin)
                 .add_plugin(debug_coordinates::DebugCoordinatesPlugin)
                 .add_plugin(vr_connector::VrConnectorPlugin);
@@ -113,12 +117,15 @@ pub fn app_main() {
             panic!("calibration/debug UI isn't enabled");
         }
     }
+
+    #[cfg(feature = "calibration")]
+    app.register_type::<frame_visualization_util::FrameBufferImageHandle>()
+        .register_type::<frame_visualization_util::FrameBufferDescriptor>();
+
     app //
         .add_plugin(receiver::KinectReceiverPlugin)
         .add_plugin(depth_texture::DepthTexturePlugin)
         .add_plugin(camera2_vmc_osc_receiver::OscReceiverPlugin)
         .register_type::<MainCamera>()
-        .register_type::<frame_visualization_util::FrameBufferImageHandle>()
-        .register_type::<frame_visualization_util::FrameBufferDescriptor>()
         .run();
 }

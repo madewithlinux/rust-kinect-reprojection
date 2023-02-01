@@ -59,7 +59,9 @@ features = ["Win32_Foundation", "Win32_System_Performance"]
 
 [features]
 default = []
+skeleton_frame = []
 calibration = [
+    "skeleton_frame",
     "debug_helpers",
     "openvr",
     "bevy-inspector-egui",

@@ -4,6 +4,7 @@ use std::io::Write;
 use bevy::{math::Affine3A, prelude::*};
 use iyes_loopless::prelude::*;
 
+use kinect1::worker_v2::ReceiverThreadArgs;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use tracing::instrument;
@@ -128,6 +129,7 @@ pub struct KinectFrameBuffers {
     pub depth: Vec<u16>,
     pub player_index: Vec<u8>,
     pub skeleton_points: Vec<Vec3>,
+    #[cfg(feature = "skeleton_frame")]
     #[serde(skip)]
     pub skeleton_frame: SkeletonFrame,
 }
@@ -142,6 +144,7 @@ impl Default for KinectFrameBuffers {
             depth: vec![Default::default(); width * height],
             player_index: vec![Default::default(); width * height],
             skeleton_points: vec![Default::default(); width * height],
+            #[cfg(feature = "skeleton_frame")]
             skeleton_frame: Default::default(),
         }
     }
@@ -178,12 +181,20 @@ fn frame_message_to_frame_data_v2(received_frame: FrameMessage) -> KinectFrameBu
         depth: received_frame.depth,
         player_index: received_frame.player_index,
         skeleton_points: received_frame.skeleton_points,
+        #[cfg(feature = "skeleton_frame")]
         skeleton_frame: received_frame.skeleton_frame,
     }
 }
 
 fn setup_kinect_receiver(world: &mut World) {
-    let receiver = start_frame_thread2();
+    #[cfg(feature = "skeleton_frame")]
+    let skeleton_stream_enabled = true;
+    #[cfg(not(feature = "skeleton"))]
+    let skeleton_stream_enabled = false;
+    let receiver = start_frame_thread2(ReceiverThreadArgs {
+        skeleton_stream_enabled,
+        ..default()
+    });
     world.insert_non_send_resource(KinectReceiver(receiver));
 }
 
@@ -241,5 +252,16 @@ impl Plugin for KinectReceiverPlugin {
             )
             .add_system(update_depth_transformer.run_if(kinect_enabled))
             .register_type::<KinectDepthTransformer>();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_size_of_skeleton_frame() {
+        assert_eq!(std::mem::size_of::<SkeletonFrame>(), 72);
+        // assert_eq!(std::mem::size_of::<KinectFrameBuffers>(), 176);
     }
 }

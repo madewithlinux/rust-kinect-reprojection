@@ -246,3 +246,13 @@ impl SkeletonFrame {
             .map(|sk| sk.get_skeleton_position_data(SkeletonPositionIndex::HandRight))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_size_of_skeleton_frame() {
+        assert_eq!(std::mem::size_of::<SkeletonFrame>(), 72);
+    }
+}

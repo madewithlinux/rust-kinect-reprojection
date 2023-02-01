@@ -51,6 +51,7 @@ pub struct ReceiverThreadArgs {
     pub depth_buffered_frame_limit: u32,
     pub use_extended_depth_range: bool,
 
+    pub skeleton_stream_enabled: bool,
     pub skeleton_stream_flags: u32,
 
     pub frame_registration: FrameRegistrationType,
@@ -76,6 +77,8 @@ impl Default for ReceiverThreadArgs {
             depth_stream_flags: 0,
             depth_buffered_frame_limit: 2,
             use_extended_depth_range: false,
+
+            skeleton_stream_enabled: true,
             skeleton_stream_flags: 0,
 
             // mapping: FrameMappingType::RemapColor,
@@ -92,7 +95,6 @@ pub struct ReceiverThreadData {
     color_height: usize,
     // depth_width: usize,
     // depth_height: usize,
-
     sensor: *mut INuiSensor,
 
     color_stream_handle: kinect1_sys::HANDLE,
@@ -147,7 +149,6 @@ impl ReceiverThreadData {
             color_height,
             // depth_width,
             // depth_height,
-
             sensor: null_mut(),
 
             color_stream_handle: null_mut(),
@@ -194,8 +195,12 @@ impl ReceiverThreadData {
             NuiInitialize,
             NUI_INITIALIZE_FLAG_USES_COLOR
                 | NUI_INITIALIZE_FLAG_USES_DEPTH_AND_PLAYER_INDEX
-                | NUI_INITIALIZE_FLAG_USES_SKELETON
                 | NUI_IMAGE_STREAM_FLAG_SUPPRESS_NO_FRAME_DATA
+                | if self.args.skeleton_stream_enabled {
+                    NUI_INITIALIZE_FLAG_USES_SKELETON
+                } else {
+                    0
+                }
         );
 
         self.color_next_frame_event =
@@ -227,12 +232,14 @@ impl ReceiverThreadData {
             &mut self.depth_stream_handle
         );
 
-        call_method!(
-            self.sensor,
-            NuiSkeletonTrackingEnable,
-            std::mem::transmute(self.skeleton_next_frame_event),
-            self.args.skeleton_stream_flags
-        );
+        if self.args.skeleton_stream_enabled {
+            call_method!(
+                self.sensor,
+                NuiSkeletonTrackingEnable,
+                std::mem::transmute(self.skeleton_next_frame_event),
+                self.args.skeleton_stream_flags
+            );
+        }
 
         call_method!(self.sensor, NuiGetCoordinateMapper, &mut self.coordinate_mapper);
     }
@@ -495,15 +502,19 @@ impl ReceiverThreadData {
 
         loop {
             unsafe {
-                WaitForMultipleObjects(
-                    &[
-                        self.color_next_frame_event,
-                        self.depth_next_frame_event,
-                        self.skeleton_next_frame_event,
-                    ],
-                    false,
-                    100,
-                )
+                if self.args.skeleton_stream_enabled {
+                    WaitForMultipleObjects(
+                        &[
+                            self.color_next_frame_event,
+                            self.depth_next_frame_event,
+                            self.skeleton_next_frame_event,
+                        ],
+                        false,
+                        100,
+                    )
+                } else {
+                    WaitForMultipleObjects(&[self.color_next_frame_event, self.depth_next_frame_event], false, 100)
+                }
             };
 
             if unsafe { WaitForSingleObject(self.color_next_frame_event, 0) } == WAIT_OBJECT_0 {
@@ -514,7 +525,9 @@ impl ReceiverThreadData {
                 self.receive_depth_frame();
                 have_new_depth_data = true;
             }
-            if unsafe { WaitForSingleObject(self.skeleton_next_frame_event, 0) } == WAIT_OBJECT_0 {
+            if self.args.skeleton_stream_enabled
+                && unsafe { WaitForSingleObject(self.skeleton_next_frame_event, 0) } == WAIT_OBJECT_0
+            {
                 self.receive_skeleton_frame();
                 have_new_skeleton_data = true;
             }
@@ -522,10 +535,10 @@ impl ReceiverThreadData {
             // only send a new frame message if we've got two matching frames
             if self.have_rgba_data
                 && self.have_depth_data
-                && self.have_skeleton_data
+                && (self.have_skeleton_data || !self.args.skeleton_stream_enabled)
                 && have_new_rgba_data
                 && have_new_depth_data
-                && have_new_skeleton_data
+                && (have_new_skeleton_data || !self.args.skeleton_stream_enabled)
                 && (self.color_frame_info.timestamp - self.depth_frame_info.timestamp).abs() <= MAX_ALLOWED_ELAPSED_TIME
                 && self.color_frame_info.timestamp != Default::default()
                 && self.depth_frame_info.timestamp != Default::default()
@@ -566,8 +579,8 @@ pub struct FrameMessage {
 
 pub type FrameMessageReceiver = crossbeam::channel::Receiver<FrameMessage>;
 
-pub fn start_frame_thread2() -> FrameMessageReceiver {
-    let args = ReceiverThreadArgs::default();
+pub fn start_frame_thread2(args: ReceiverThreadArgs) -> FrameMessageReceiver {
+    // let args = ReceiverThreadArgs::default();
     let (sender, receiver) = crossbeam::channel::bounded(2);
     std::thread::spawn(move || {
         let mut thread_data = ReceiverThreadData::init_new(args);
