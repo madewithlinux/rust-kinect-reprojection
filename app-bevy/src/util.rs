@@ -15,6 +15,14 @@ pub(crate) fn draw_debug_axes(lines: &mut bevy_prototype_debug_lines::DebugLines
     lines.line_colored(origin, origin + dz * scale, 0.0, Color::BLUE);
 }
 
+pub fn write_to_pretty_json_file<T: Serialize>(value: &T, file_path: impl AsRef<std::path::Path>) {
+    let s = serde_json::to_string_pretty(value).unwrap();
+    std::fs::File::create(file_path)
+        .unwrap()
+        .write_all(s.as_bytes())
+        .unwrap();
+}
+
 pub fn write_to_json_file<T: Serialize>(value: &T, file_path: impl AsRef<std::path::Path>) {
     let s = serde_json::to_string(value).unwrap();
     std::fs::File::create(file_path)
@@ -27,4 +35,11 @@ pub fn read_from_json_file<T: DeserializeOwned>(file_path: impl AsRef<std::path:
     let mut s = String::new();
     std::fs::File::open(&file_path).unwrap().read_to_string(&mut s).unwrap();
     serde_json::from_str(&s).unwrap()
+}
+
+pub fn try_read_from_json_file<T: DeserializeOwned>(file_path: impl AsRef<std::path::Path>) -> anyhow::Result<T> {
+    let mut s = String::new();
+    std::fs::File::open(&file_path)?.read_to_string(&mut s)?;
+    let t = serde_json::from_str(&s)?;
+    Ok(t)
 }

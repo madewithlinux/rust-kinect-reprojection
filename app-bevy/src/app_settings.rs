@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{COLOR_WIDTH, COLOR_HEIGHT};
+use crate::{COLOR_HEIGHT, COLOR_WIDTH};
 
 #[derive(Default, Debug, Clone, Reflect, Serialize, Deserialize)]
 pub enum UiMode {
@@ -40,6 +40,7 @@ pub struct AppSettings {
     pub depth_texture_do_lookback: bool,
     pub depth_texture_do_lookahead: bool,
     pub depth_texture_always_use_player_index: bool,
+    pub camera2_settings_folder: String,
     // debugging options
     pub show_debug_axes: bool,
     pub show_debug_entities: bool,
@@ -50,6 +51,9 @@ pub struct AppSettings {
 
 impl Default for AppSettings {
     fn default() -> Self {
+        const DEFAULT_CAMERA2_SETTINGS_FOLDER: &str =
+            r#"C:\Program Files (x86)\Steam\steamapps\common\Beat Saber\UserData\Camera2\"#;
+
         Self {
             ui_mode: default(),
             window_title: "Kinect Reprojection".to_string(),
@@ -71,6 +75,7 @@ impl Default for AppSettings {
             depth_texture_do_lookback: true,
             depth_texture_do_lookahead: true,
             depth_texture_always_use_player_index: false,
+            camera2_settings_folder: DEFAULT_CAMERA2_SETTINGS_FOLDER.to_string(),
 
             show_debug_axes: true,
             show_debug_entities: true,
