@@ -50,6 +50,7 @@ egui_dock = { version = "0.3", optional = true }
 rfd = { version = "0.11.0", optional = true }
 # bevy-aabb-instancing = { git = "https://github.com/foresightminingsoftwarecorporation/bevy-aabb-instancing" }
 smooth-bevy-cameras = { git = "https://github.com/olegomon/smooth-bevy-cameras", optional = true }
+rand = "0.8.5"
 
 
 [dependencies.windows]
@@ -60,31 +61,12 @@ features = ["Win32_Foundation", "Win32_System_Performance"]
 [features]
 default = []
 skeleton_frame = []
-calibration = [
-    "skeleton_frame",
-    "debug_helpers",
-    "openvr",
-    "bevy-inspector-egui",
-    "egui",
-    "bevy_egui",
-    "egui_dock",
-    "rfd",
-    "smooth-bevy-cameras",
-    # additional bevy features
-    # "bevy/bevy_scene",
-    # "bevy/bevy_gilrs",
-    # "bevy/bevy_audio",
-    # "bevy/animation",
-    # "bevy/x11",
-    "bevy/filesystem_watcher",
-    "bevy/render",
-    "bevy/bevy_sprite",
-    "bevy/bevy_pbr",
-    "bevy/bevy_gltf",
-    "bevy/bevy_text",
-    "bevy/bevy_ui",
-    "bevy/png",
-    "bevy/hdr",
-    "bevy/vorbis",
-]
+calibration = ["skeleton_frame", "debug_helpers", "openvr", "bevy-inspector-egui", "egui", "bevy_egui", "egui_dock", "rfd", "smooth-bevy-cameras", "bevy/filesystem_watcher", "bevy/render", "bevy/bevy_sprite", "bevy/bevy_pbr", "bevy/bevy_gltf", "bevy/bevy_text", "bevy/bevy_ui", "bevy/png", "bevy/hdr", "bevy/vorbis"]
 debug_helpers = ["bevy_prototype_debug_lines"]
+
+[dev-dependencies]
+criterion = "0.4"
+
+[[bench]]
+name = "cpu_transform"
+harness = false

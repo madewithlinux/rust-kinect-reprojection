@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::ptr::null_mut;
 
 use bytemuck::cast_slice;
@@ -242,6 +243,19 @@ impl ReceiverThreadData {
         }
 
         call_method!(self.sensor, NuiGetCoordinateMapper, &mut self.coordinate_mapper);
+
+        // let mut p_data_byte_count = 0;
+        // let mut pp_data = null_mut();
+        // call_method!(
+        //     self.coordinate_mapper,
+        //     GetColorToDepthRelationalParameters,
+        //     &mut p_data_byte_count,
+        //     &mut pp_data
+        // );
+        // std::fs::File::create("GetColorToDepthRelationalParameters.bin")
+        //     .unwrap()
+        //     .write(unsafe { std::slice::from_raw_parts(pp_data as *mut u8, p_data_byte_count as usize) })
+        //     .unwrap();
     }
 
     #[instrument(skip_all)]

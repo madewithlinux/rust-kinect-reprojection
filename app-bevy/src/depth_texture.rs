@@ -408,6 +408,7 @@ impl Material for CustomMaterial {
         layout: &bevy::render::mesh::MeshVertexBufferLayout,
         _key: bevy::pbr::MaterialPipelineKey<Self>,
     ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        // descriptor.primitive.polygon_mode = render_resource::PolygonMode::Point;
         // descriptor.primitive.polygon_mode = PolygonMode::Line;
         descriptor.primitive.cull_mode = None;
         // descriptor.primitive.unclipped_depth = true;

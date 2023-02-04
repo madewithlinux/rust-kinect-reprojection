@@ -88,7 +88,7 @@ fn osc_event_listener_system(
 ) {
     let timestamp = query_performance_counter_ms();
     for event in events.iter() {
-        info!("osc event: {:?}", &event.packet);
+        // info!("osc event: {:?}", &event.packet);
         match &event.packet {
             Packet::Message(Message { addr, args }) => {
                 if addr != CAMERA2_VMC_ADDR {
