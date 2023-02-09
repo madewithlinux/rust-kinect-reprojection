@@ -12,6 +12,7 @@ pub enum UiMode {
     Game,
     #[default]
     Dock,
+    Calibration,
 }
 
 #[derive(Resource, Debug, Clone, Reflect, Serialize, Deserialize)]

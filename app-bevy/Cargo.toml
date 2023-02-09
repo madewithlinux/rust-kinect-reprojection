@@ -59,7 +59,8 @@ features = ["Win32_Foundation", "Win32_System_Performance"]
 
 
 [features]
-default = []
+# default = []
+default = ["calibration", "backtrace"]
 skeleton_frame = []
 calibration = ["skeleton_frame", "debug_helpers", "openvr", "bevy-inspector-egui", "egui", "bevy_egui", "egui_dock", "rfd", "smooth-bevy-cameras", "bevy/filesystem_watcher", "bevy/render", "bevy/bevy_sprite", "bevy/bevy_pbr", "bevy/bevy_gltf", "bevy/bevy_text", "bevy/bevy_ui", "bevy/png", "bevy/hdr", "bevy/vorbis"]
 debug_helpers = ["bevy_prototype_debug_lines"]

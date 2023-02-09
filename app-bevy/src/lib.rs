@@ -22,6 +22,8 @@ pub mod dock_ui;
 pub mod game_ui;
 #[cfg(feature = "calibration")]
 pub mod vr_connector;
+#[cfg(feature = "calibration")]
+pub mod calibration_ui;
 
 pub const COLOR_WIDTH: usize = 640;
 pub const COLOR_HEIGHT: usize = 480;
@@ -116,6 +118,17 @@ pub fn app_main() {
             #[cfg(not(feature = "calibration"))]
             panic!("calibration/debug UI isn't enabled");
         }
+        UiMode::Calibration => {
+            #[cfg(feature = "calibration")]
+            app
+                // app plugins
+                .add_plugin(calibration_ui::AppCalibrationUiPlugin)
+                // .add_plugin(point_cloud::PointCloudPlugin)
+                .add_plugin(debug_coordinates::DebugCoordinatesPlugin)
+                .add_plugin(vr_connector::VrConnectorPlugin);
+            #[cfg(not(feature = "calibration"))]
+            panic!("calibration/debug UI isn't enabled");
+        },
     }
 
     #[cfg(feature = "calibration")]
