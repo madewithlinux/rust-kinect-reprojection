@@ -5,9 +5,10 @@ use bevy::render::render_resource::{Extent3d, TextureFormat};
 use bevy::render::texture::ImageSampler;
 use bevy_inspector_egui::bevy_inspector;
 use bevy_inspector_egui::DefaultInspectorConfigPlugin;
-use egui::ScrollArea;
+use egui::{Button, RichText, ScrollArea, Ui};
 use itertools::Itertools;
 
+use crate::app_settings::AppSettings;
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
 use crate::{MainCamera, COLOR_HEIGHT, COLOR_WIDTH};
 
@@ -20,19 +21,25 @@ impl Plugin for AppCalibrationUiPlugin {
             .insert_resource(UiState::new())
             .add_system_to_stage(CoreStage::PreUpdate, show_ui_system.at_end())
             //
+            .add_startup_system(set_egui_scale_factor)
             .add_startup_system(spawn_2d_camera)
             .add_system(set_camera_viewport)
             .add_system(update_framebuffer_images)
-            .add_startup_system(spawn_rgba_sprite)
-            // .add_system(update_sprite_transform)
             //
+            .add_startup_system(spawn_rgba_sprite)
             .add_startup_system(spawn_cursor_sprite)
             .add_system(update_cursor_sprite_transform)
+            //
             .register_type::<FrameBufferImageHandle>()
             .register_type::<Option<Handle<Image>>>()
+            .register_type::<RgbaSpriteMarker>()
+            .register_type::<CursorImage>()
+            .register_type::<CursorPixelPosition>()
             .register_type::<AlphaMode>();
     }
 }
+
+// region: UI boilerplate
 
 fn show_ui_system(world: &mut World) {
     let mut egui_context = world.resource_mut::<bevy_egui::EguiContext>().ctx_mut().clone();
@@ -53,6 +60,12 @@ fn spawn_2d_camera(mut commands: Commands) {
             ..default()
         })
         .insert(MainCamera);
+}
+
+fn set_egui_scale_factor(mut egui_settings: ResMut<bevy_egui::EguiSettings>, app_settings: Res<AppSettings>) {
+    if let Some(scale_factor) = app_settings.gui_scale_factor_override {
+        egui_settings.scale_factor = scale_factor;
+    }
 }
 
 // make camera only render to view not obstructed by UI
@@ -94,13 +107,35 @@ impl UiState {
         }
     }
 
+    fn edit_window_scale_factor(&mut self, world: &mut World, ui: &mut Ui) {
+        let mut egui_settings = world.resource_mut::<bevy_egui::EguiSettings>();
+
+        let selected = &mut egui_settings.scale_factor;
+        egui::ComboBox::from_label("GUI scale")
+            .selected_text(format!("{:?}", selected))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(selected, 0.5, "0.5");
+                ui.selectable_value(selected, 0.75, "0.75");
+                ui.selectable_value(selected, 1.0, "1.0");
+                ui.selectable_value(selected, 1.25, "1.25");
+                ui.selectable_value(selected, 1.5, "1.5");
+                ui.selectable_value(selected, 1.75, "1.75");
+                ui.selectable_value(selected, 2.0, "2.0");
+                ui.selectable_value(selected, 2.5, "2.5");
+                ui.selectable_value(selected, 3.0, "3.0");
+                ui.selectable_value(selected, 3.5, "3.5");
+                ui.selectable_value(selected, 4.0, "4.0");
+            });
+    }
+
     fn ui(&mut self, world: &mut World, ctx: &mut egui::Context) {
         egui::SidePanel::left("left_panel")
             .resizable(true)
-            .default_width(128.0)
+            .default_width(256.0)
             .show(ctx, |ui| {
                 ScrollArea::vertical().show(ui, |ui| {
-                    ui.label("Hello World!");
+                    self.edit_window_scale_factor(world, ui);
+                    ui.separator();
 
                     for pos in &[
                         vec2(40.0, 40.0),
@@ -125,6 +160,9 @@ impl UiState {
     }
 }
 
+// endregion
+
+// region: rgba sprite
 #[derive(Component, Reflect, Debug)]
 struct RgbaSpriteMarker;
 
@@ -155,6 +193,10 @@ fn spawn_rgba_sprite(mut commands: Commands, mut images: ResMut<Assets<Image>>) 
         },
     ));
 }
+
+// endregion
+
+// region: cursor sprite
 
 #[derive(Resource, Reflect, Debug)]
 struct CursorImage(Handle<Image>);
@@ -251,23 +293,8 @@ fn update_cursor_sprite_transform(mut cursor_query: Query<(&CursorPixelPosition,
     }
 }
 
-// fn update_sprite_transform(
-//     cameras: Query<&mut Camera, With<MainCamera>>,
-//     mut sprite_query: Query<&mut Transform, With<RgbaSpriteMarker>>,
-//     windows: Res<Windows>,
-// ) {
-//     let window = windows.primary();
-//     let scale_factor = window.scale_factor() as f32;
+// endregion
 
-//     let cam = cameras.single();
-//     let physical_size = match &cam.viewport {
-//         Some(vp) => vp.physical_size,
-//         None => return,
-//     };
-//     let viewport_width = (physical_size.x as f32) / scale_factor;
-//     // let viewport_height = (physical_size.y as f32) / scale_factor;
+// region: UI utility functions
 
-//     for mut transform in sprite_query.iter_mut() {
-//         *transform = Transform::from_scale(Vec3::splat(viewport_width)).with_translation(Vec3::ZERO);
-//     }
-// }
+// endregion
