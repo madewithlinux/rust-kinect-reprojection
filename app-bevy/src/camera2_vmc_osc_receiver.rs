@@ -2,8 +2,10 @@ use std::f32::consts::PI;
 
 use anyhow::bail;
 use anyhow::Context;
+use bevy::math::vec2;
 use bevy::math::Affine3A;
 use bevy::prelude::*;
+use bevy::render::camera::Viewport;
 use bevy_osc::{Osc, OscEvent, OscSettings};
 #[cfg(feature = "debug_helpers")]
 use bevy_prototype_debug_lines::DebugLines;
@@ -24,12 +26,57 @@ use crate::util::draw_debug_axes;
 use crate::util::try_read_from_json_file;
 use crate::MainCamera;
 
-#[derive(Resource, Debug, Default, Clone, Reflect, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Reflect, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Camera2ViewRect {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+impl Default for Camera2ViewRect {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        }
+    }
+}
+
+#[derive(Resource, Debug, Default, Copy, Clone, Reflect, Serialize, Deserialize)]
 #[reflect(Debug, Resource)]
 pub struct VmcCameraInfo {
     pub translation: Vec3,
     pub rotation: Quat,
     pub fov: f32,
+    pub view_rect: Camera2ViewRect,
+}
+
+impl VmcCameraInfo {
+    fn set_camera_settings(&self, camera: &mut Camera, transform: &mut Transform, projection: &mut Projection) {
+        let Some(target_size) = camera.physical_target_size() else {
+            return
+        };
+        let target_size = target_size.as_vec2();
+        // in camera2, x/y 0/0 is the bottom left corner of the window
+        let physical_position = vec2(self.view_rect.x, 1.0 - self.view_rect.y - self.view_rect.height) * target_size;
+        let physical_size = vec2(self.view_rect.width, self.view_rect.height) * target_size;
+
+        camera.viewport = Some(Viewport {
+            physical_position: physical_position.as_uvec2(),
+            physical_size: physical_size.as_uvec2(),
+            depth: 0.0..1.0,
+        });
+        *transform = Transform::from_translation(self.translation).with_rotation(self.rotation);
+        *projection = PerspectiveProjection {
+            fov: self.fov * PI / 180.0,
+            ..default()
+        }
+        .into();
+    }
 }
 
 #[derive(Component, Debug, Default, Clone, Reflect)]
@@ -53,7 +100,7 @@ impl Plugin for OscReceiverPlugin {
             .add_system(osc_event_listener_system.run_if(camera2_vmc_enabled))
             .add_system(osc_transform_watcher.run_if(camera2_vmc_enabled))
             // run it at the end to make sure that the camera has spawned
-            .add_startup_system(setup_initial_camera_settings.run_if(camera2_vmc_enabled).at_end())
+            .add_system(setup_reload_initial_camera_settings.run_if(camera2_vmc_enabled).at_end())
             // .register_type()
             ;
     }
@@ -78,16 +125,11 @@ const CAMERA2_VMC_ADDR: &str = "/VMC/Ext/Cam";
 fn osc_transform_watcher(
     mut receive_buffer: ResMut<CameraReceiverBuffer>,
     settings: Res<AppSettings>,
-    mut camera_query: Query<(&mut Transform, &mut Projection), With<VmcCameraMarker>>,
+    mut camera_query: Query<(&mut Camera, &mut Transform, &mut Projection), With<VmcCameraMarker>>,
 ) {
     let Some(vmc_camera_info) = receive_buffer.0.pop_for_delay(settings.fixed_delay_ms) else { return; };
-    let (mut transform, mut projection) = camera_query.single_mut();
-    *transform = Transform::from_translation(vmc_camera_info.translation).with_rotation(vmc_camera_info.rotation);
-    *projection = PerspectiveProjection {
-        fov: vmc_camera_info.fov * PI / 180.0,
-        ..default()
-    }
-    .into();
+    let (mut camera, mut transform, mut projection) = camera_query.single_mut();
+    vmc_camera_info.set_camera_settings(&mut camera, &mut transform, &mut projection);
 }
 
 fn osc_event_listener_system(
@@ -97,6 +139,13 @@ fn osc_event_listener_system(
     settings: Res<AppSettings>,
 ) {
     let timestamp = query_performance_counter_ms();
+
+    // the camera viewRect isn't sent via VMC/OSC, so we need to just re-use whatever is the existing one.
+    let view_rect = match receive_buffer.0.front() {
+        Some(camera_config) => camera_config.view_rect,
+        None => default(),
+    };
+
     for event in events.iter() {
         // info!("osc event: {:?}", &event.packet);
         match &event.packet {
@@ -126,6 +175,7 @@ fn osc_event_listener_system(
                                 translation,
                                 rotation,
                                 fov: *fov,
+                                view_rect,
                             },
                         );
                     }
@@ -272,6 +322,12 @@ pub fn read_camera2_info_from_config_files(
                 translation,
                 rotation,
                 fov: camera_config.fov,
+                view_rect: Camera2ViewRect {
+                    x: camera_config.view_rect.x,
+                    y: camera_config.view_rect.y,
+                    width: camera_config.view_rect.width,
+                    height: camera_config.view_rect.height,
+                },
             });
         }
     }
@@ -279,26 +335,27 @@ pub fn read_camera2_info_from_config_files(
     bail!("no active camera found with type = Positionable and VMCProtocol.mode = Sender");
 }
 
-fn setup_initial_camera_settings(
+fn setup_reload_initial_camera_settings(
     settings: Res<AppSettings>,
-    mut camera_query: Query<(&mut Transform, &mut Projection), With<VmcCameraMarker>>,
+    mut camera_query: Query<(&mut Camera, &mut Transform, &mut Projection), With<VmcCameraMarker>>,
+    mut receive_buffer: ResMut<CameraReceiverBuffer>,
+    mut initialized: Local<bool>,
+    keys: Res<Input<KeyCode>>,
 ) {
-    match read_camera2_info_from_config_files(&settings.camera2_settings_folder) {
-        Ok(vmc_camera_info) => {
-            info!("read initial camera config: {:?}", &vmc_camera_info);
-            let (mut transform, mut projection) = camera_query.single_mut();
-            *transform =
-                Transform::from_translation(vmc_camera_info.translation).with_rotation(vmc_camera_info.rotation);
-            *projection = PerspectiveProjection {
-                fov: vmc_camera_info.fov * PI / 180.0,
-                ..default()
+    if !(*initialized) || keys.just_released(KeyCode::R) {
+        match read_camera2_info_from_config_files(&settings.camera2_settings_folder) {
+            Ok(vmc_camera_info) => {
+                info!("read initial camera config: {:?}", &vmc_camera_info);
+                receive_buffer.0.push(vmc_camera_info);
+                let (mut camera, mut transform, mut projection) = camera_query.single_mut();
+                vmc_camera_info.set_camera_settings(&mut camera, &mut transform, &mut projection);
             }
-            .into();
+            Err(e) => {
+                info!("failed to load initial camera settings: {:?}", e);
+                return;
+            }
         }
-        Err(e) => {
-            info!("failed to load initial camera settings: {:?}", e);
-            return;
-        }
+        *initialized = true;
     }
 }
 
