@@ -14,6 +14,43 @@ use crate::{
 
 pub struct OpenVrContextSystem(openvr::Context, openvr::System);
 
+#[derive(Debug, Default, Copy, Clone, Reflect)]
+#[reflect(Debug)]
+pub struct ControllerState {
+    pub packet_num: u32,
+    pub button_pressed: u64,
+    pub button_touched: u64,
+    pub axis: [(f32, f32); 5],
+    /// "B" button on index controllers
+    pub menu_pressed: bool,
+    /// "A" button on index controllers
+    pub back_pressed: bool,
+    /// trigger click on index controllers
+    pub trigger_pressed: bool,
+    /// touchpad hard-press or joystick movement or click on index controllers
+    pub touchpad_pressed: bool,
+}
+impl From<&openvr::ControllerState> for ControllerState {
+    fn from(value: &openvr::ControllerState) -> Self {
+        Self {
+            packet_num: value.packet_num,
+            button_pressed: value.button_pressed,
+            button_touched: value.button_touched,
+            axis: [
+                (value.axis[0].x, value.axis[0].y),
+                (value.axis[1].x, value.axis[1].y),
+                (value.axis[2].x, value.axis[2].y),
+                (value.axis[3].x, value.axis[3].y),
+                (value.axis[4].x, value.axis[4].y),
+            ],
+            menu_pressed: (value.button_pressed & (1 << openvr::button_id::APPLICATION_MENU)) != 0,
+            back_pressed: (value.button_pressed & (1 << openvr::button_id::DASHBOARD_BACK)) != 0,
+            trigger_pressed: (value.button_pressed & (1 << openvr::button_id::STEAM_VR_TRIGGER)) != 0,
+            touchpad_pressed: (value.button_pressed & (1 << openvr::button_id::STEAM_VR_TOUCHPAD)) != 0,
+        }
+    }
+}
+
 #[derive(Resource, Debug, Default, Clone, Reflect)]
 #[reflect(Debug, Resource)]
 pub struct TrackedDevicePose {
@@ -22,6 +59,9 @@ pub struct TrackedDevicePose {
     pub angular_velocity: Vec3,
     pub position: Vec3,
     pub transform: Affine3A,
+    // TODO: why can't this field reflect?
+    #[reflect(ignore)]
+    pub controller_state: Option<ControllerState>,
 }
 impl From<&openvr::TrackedDevicePose> for TrackedDevicePose {
     fn from(pose: &openvr::TrackedDevicePose) -> Self {
@@ -44,6 +84,7 @@ impl From<&openvr::TrackedDevicePose> for TrackedDevicePose {
                 ])
                 .transpose(),
             ),
+            controller_state: None,
         }
     }
 }
@@ -96,10 +137,14 @@ fn update_pose_data(
                 pose_data.hmd = TrackedDevicePose::from(pose);
             }
             openvr::TrackedDeviceClass::Controller => {
+                let controller_state: Option<ControllerState> =
+                    system.controller_state(i as u32).map(|cs| ControllerState::from(&cs));
                 if i == left_controller_index {
                     pose_data.left_controller = TrackedDevicePose::from(pose);
+                    pose_data.left_controller.controller_state = controller_state;
                 } else if i == right_controller_index {
                     pose_data.right_controller = TrackedDevicePose::from(pose);
+                    pose_data.right_controller.controller_state = controller_state;
                 }
             }
             _ => (), // skip other tracking data

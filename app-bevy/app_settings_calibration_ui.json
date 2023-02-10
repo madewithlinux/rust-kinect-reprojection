@@ -1,0 +1,17 @@
+{
+  "ui_mode": "Calibration",
+  "window_width": 1920,
+  "window_height": 1080,
+  "window_resizable": true,
+  "gui_scale_factor_override": 1.5,
+  "kinect_enabled": true,
+  "vr_input_enabled": true,
+  "camera2_vmc_enabled": false,
+  "history_buffer_size": 2,
+  "fixed_delay_ms": 0,
+  "kinect_static_frame": "kinect_framebuffers.json",
+  "show_debug_axes": true,
+  "show_debug_entities": true,
+  "show_debug_skeleton": true,
+  "show_debug_coordinate_matchup": true
+}
