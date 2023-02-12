@@ -2,8 +2,13 @@
   "ui_mode": "Dock",
   "kinect_enabled": true,
   "kinect_static_frame asdf": "kinect_framebuffers.json",
-  "vr_input_enabled": false,
-  "camera2_vmc_enabled": true,
+  "vr_input_enabled": true,
+  "camera2_vmc_enabled": false,
+  "kinect_transform": {
+    "position": [0.12620316, 2.435134, 1.9299076],
+    "euler_rotation": [148.47508, -0.13849427, -176.70303],
+    "scale": [1.0000001, 1.0, 1.0]
+  },
   "history_buffer_size": 2,
   "fixed_delay_ms": 500,
   "show_debug_axes": true,

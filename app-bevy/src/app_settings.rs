@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use bevy::prelude::*;
+use bevy::{math::Affine3A, prelude::*};
 // use iyes_loopless::prelude::*;
 
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,41 @@ pub enum UiMode {
     #[default]
     Dock,
     Calibration,
+}
+
+#[derive(Debug, Clone, Reflect, Serialize, Deserialize)]
+#[reflect(Debug)]
+#[serde(default)]
+pub struct KinectTransform {
+    /// position of the kinect in VR coordinate space, in meters
+    pub position: Vec3,
+    /// euler rotation in XYZ order, in degrees
+    pub euler_rotation: Vec3,
+    /// scale should probably always be [1.0, 1.0, 1.0] (the default value)
+    pub scale: Vec3,
+}
+impl KinectTransform {
+    pub fn to_affine(&self) -> Affine3A {
+        Affine3A::from_scale_rotation_translation(
+            self.scale,
+            Quat::from_euler(
+                EulerRot::XYZ,
+                self.euler_rotation.x * std::f32::consts::PI / 180.0,
+                self.euler_rotation.y * std::f32::consts::PI / 180.0,
+                self.euler_rotation.z * std::f32::consts::PI / 180.0,
+            ),
+            self.position,
+        )
+    }
+}
+impl Default for KinectTransform {
+    fn default() -> Self {
+        Self {
+            position: Vec3::ZERO,
+            euler_rotation: Vec3::ZERO,
+            scale: Vec3::ONE,
+        }
+    }
 }
 
 #[derive(Resource, Debug, Clone, Reflect, Serialize, Deserialize)]
@@ -35,10 +70,9 @@ pub struct AppSettings {
     pub kinect_enabled: bool,
     pub vr_input_enabled: bool,
     pub camera2_vmc_enabled: bool,
-    /// deprecated
-    pub history_buffer_size: usize,
     // individual plugin options
     pub fixed_delay_ms: i64,
+    pub kinect_transform: KinectTransform,
     pub depth_texture_do_lookback: bool,
     pub depth_texture_do_lookahead: bool,
     pub depth_texture_always_use_player_index: bool,
@@ -73,8 +107,8 @@ impl Default for AppSettings {
             vr_input_enabled: true,
             camera2_vmc_enabled: true,
 
-            history_buffer_size: 2,
             fixed_delay_ms: 500,
+            kinect_transform: default(),
             depth_texture_do_lookback: true,
             depth_texture_do_lookahead: true,
             depth_texture_always_use_player_index: false,

@@ -23,16 +23,15 @@ use crate::{
     COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH,
 };
 
-// pub struct KinectReceiver(pub FrameMessageReceiver, pub DelayBuffer<FrameMessage>);
 pub struct KinectReceiver(pub FrameMessageReceiver);
 
-// TODO: put this stuff in AppSettings as well?
-#[derive(Resource, Debug, Default, Clone, Reflect)]
+#[derive(Resource, Debug, Clone, Reflect)]
 #[reflect(Debug, Resource)]
 pub struct KinectDepthTransformer {
     pub pixel_width: usize,
     pub width: f32,
     pub height: f32,
+    // these values are updated from AppSettings whenever it changes
     pub kinect_position: Vec3,
     pub kinect_rot_deg: Vec3,
     pub kinect_scale: Vec3,
@@ -40,7 +39,15 @@ pub struct KinectDepthTransformer {
     point_transform_matrix_inverse: Affine3A,
     pub point_cloud_skel: bool,
 }
-fn update_depth_transformer(mut kdt: ResMut<KinectDepthTransformer>) {
+fn update_depth_transformer(mut kdt: ResMut<KinectDepthTransformer>, settings: Res<AppSettings>) {
+    if !settings.is_added() && !settings.is_changed() {
+        return;
+    }
+
+    kdt.kinect_position = settings.kinect_transform.position;
+    kdt.kinect_rot_deg = settings.kinect_transform.euler_rotation;
+    kdt.kinect_scale = settings.kinect_transform.scale;
+
     kdt.point_transform_matrix = Affine3A::from_scale_rotation_translation(
         kdt.kinect_scale,
         Quat::from_euler(
@@ -53,8 +60,19 @@ fn update_depth_transformer(mut kdt: ResMut<KinectDepthTransformer>) {
     );
     kdt.point_transform_matrix_inverse = kdt.point_transform_matrix.inverse();
 }
+impl FromWorld for KinectDepthTransformer {
+    fn from_world(world: &mut World) -> Self {
+        let settings = world.resource::<AppSettings>();
+        Self {
+            kinect_position: settings.kinect_transform.position,
+            kinect_rot_deg: settings.kinect_transform.euler_rotation,
+            kinect_scale: settings.kinect_transform.scale,
+            ..Self::new()
+        }
+    }
+}
 impl KinectDepthTransformer {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             pixel_width: DEPTH_WIDTH,
             width: DEPTH_WIDTH as f32,
@@ -232,7 +250,8 @@ pub struct KinectReceiverPlugin;
 impl Plugin for KinectReceiverPlugin {
     fn build(&self, app: &mut App) {
         app //
-            .insert_resource(KinectDepthTransformer::new())
+            // .insert_resource(KinectDepthTransformer::new())
+            .init_resource::<KinectDepthTransformer>()
             .insert_resource(KinectFrameBuffers::default())
             .insert_resource(KinectFrameDataDelayBufferV2::default())
             .add_startup_system(

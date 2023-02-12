@@ -5,7 +5,7 @@ use iyes_loopless::prelude::*;
 use kinect1::skeleton::{SkeletonPositionIndex, SkeletonPositionTrackingState, SkeletonTrackingState};
 
 use crate::{
-    app_settings::{debug_axes_enabled, debug_coordinate_matchup_enabled, debug_skeleton_enabled},
+    app_settings::{debug_axes_enabled, debug_coordinate_matchup_enabled, debug_skeleton_enabled, AppSettings},
     receiver::{KinectDepthTransformer, KinectFrameBuffers},
     util::draw_debug_axes,
 };
@@ -50,7 +50,11 @@ fn skeleton_lines(
     }
 }
 
-fn axis_references(mut lines: ResMut<DebugLines>, dt: Res<KinectDepthTransformer>) {
+fn axis_references(
+    mut lines: ResMut<DebugLines>,
+    dt: Res<KinectDepthTransformer>,
+    // settings: Res<AppSettings>,
+) {
     let scale = 1.0;
     lines.line_colored(Vec3::ZERO, Vec3::X * scale, 0.0, Color::RED);
     lines.line_colored(Vec3::ZERO, Vec3::Y * scale, 0.0, Color::GREEN);
@@ -76,6 +80,9 @@ fn axis_references(mut lines: ResMut<DebugLines>, dt: Res<KinectDepthTransformer
         0.0,
         Color::BLUE,
     );
+
+    // let transform = settings.kinect_transform.to_affine();
+    // draw_debug_axes(&mut lines, &transform, scale / 3.0);
 }
 
 pub const REFERENCE_POINTS: [(Vec3, (usize, usize)); 3] = [
