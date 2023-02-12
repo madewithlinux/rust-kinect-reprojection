@@ -5,6 +5,7 @@ use iyes_loopless::prelude::*;
 
 use bevy_prototype_debug_lines::DebugLines;
 use openvr::TrackingResult;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     app_settings::{debug_axes_enabled, vr_input_enabled, AppSettings},
@@ -16,7 +17,7 @@ pub struct OpenVrContextSystem(openvr::Context, openvr::System);
 
 #[derive(Debug, Default, Copy, Clone, Reflect)]
 #[reflect(Debug)]
-pub struct ControllerState {
+pub struct ControllerButtonState {
     pub packet_num: u32,
     pub button_pressed: u64,
     pub button_touched: u64,
@@ -30,7 +31,7 @@ pub struct ControllerState {
     /// touchpad hard-press or joystick movement or click on index controllers
     pub touchpad_pressed: bool,
 }
-impl From<&openvr::ControllerState> for ControllerState {
+impl From<&openvr::ControllerState> for ControllerButtonState {
     fn from(value: &openvr::ControllerState) -> Self {
         Self {
             packet_num: value.packet_num,
@@ -51,6 +52,46 @@ impl From<&openvr::ControllerState> for ControllerState {
     }
 }
 
+#[derive(Debug, Default, Copy, Clone, Reflect)]
+#[reflect(Debug)]
+pub struct ControllerButtonEvents {
+    pub menu_just_pressed: bool,
+    pub menu_just_released: bool,
+    pub back_just_pressed: bool,
+    pub back_just_released: bool,
+    pub trigger_just_pressed: bool,
+    pub trigger_just_released: bool,
+    pub touchpad_just_pressed: bool,
+    pub touchpad_just_released: bool,
+}
+impl ControllerButtonEvents {
+    pub fn from_two_states(prev: &ControllerButtonState, current: &ControllerButtonState) -> Self {
+        Self {
+            menu_just_released: prev.menu_pressed && !current.menu_pressed,
+            menu_just_pressed: !prev.menu_pressed && current.menu_pressed,
+            back_just_released: prev.back_pressed && !current.back_pressed,
+            back_just_pressed: !prev.back_pressed && current.back_pressed,
+            trigger_just_released: prev.trigger_pressed && !current.trigger_pressed,
+            trigger_just_pressed: !prev.trigger_pressed && current.trigger_pressed,
+            touchpad_just_released: prev.touchpad_pressed && !current.touchpad_pressed,
+            touchpad_just_pressed: !prev.touchpad_pressed && current.touchpad_pressed,
+        }
+    }
+}
+
+fn update_controller_button_state_event(
+    state_to_update: &mut ControllerButtonState,
+    events_to_update: &mut ControllerButtonEvents,
+    new_openvr_state: &Option<openvr::ControllerState>,
+) {
+    let Some(new_openvr_state) = new_openvr_state else {
+        return;
+    };
+    let new_state = ControllerButtonState::from(new_openvr_state);
+    *events_to_update = ControllerButtonEvents::from_two_states(&state_to_update, &new_state);
+    *state_to_update = new_state;
+}
+
 #[derive(Resource, Debug, Default, Clone, Reflect)]
 #[reflect(Debug, Resource)]
 pub struct TrackedDevicePose {
@@ -59,9 +100,6 @@ pub struct TrackedDevicePose {
     pub angular_velocity: Vec3,
     pub position: Vec3,
     pub transform: Affine3A,
-    // TODO: why can't this field reflect?
-    #[reflect(ignore)]
-    pub controller_state: Option<ControllerState>,
 }
 impl From<&openvr::TrackedDevicePose> for TrackedDevicePose {
     fn from(pose: &openvr::TrackedDevicePose) -> Self {
@@ -84,9 +122,15 @@ impl From<&openvr::TrackedDevicePose> for TrackedDevicePose {
                 ])
                 .transpose(),
             ),
-            controller_state: None,
         }
     }
+}
+
+#[derive(Reflect, Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LeftOrRightController {
+    #[default]
+    Left,
+    Right,
 }
 
 #[derive(Resource, Debug, Default, Clone, Reflect)]
@@ -94,7 +138,30 @@ impl From<&openvr::TrackedDevicePose> for TrackedDevicePose {
 pub struct OpenVrPoseData {
     pub hmd: TrackedDevicePose,
     pub left_controller: TrackedDevicePose,
+    pub left_controller_button_state: ControllerButtonState,
+    pub left_controller_button_events: ControllerButtonEvents,
     pub right_controller: TrackedDevicePose,
+    pub right_controller_button_state: ControllerButtonState,
+    pub right_controller_button_events: ControllerButtonEvents,
+}
+impl OpenVrPoseData {
+    pub fn get_controller_data(
+        &self,
+        left_or_right: LeftOrRightController,
+    ) -> (&TrackedDevicePose, &ControllerButtonState, &ControllerButtonEvents) {
+        match left_or_right {
+            LeftOrRightController::Left => (
+                &self.left_controller,
+                &self.left_controller_button_state,
+                &self.left_controller_button_events,
+            ),
+            LeftOrRightController::Right => (
+                &self.right_controller,
+                &self.right_controller_button_state,
+                &self.right_controller_button_events,
+            ),
+        }
+    }
 }
 
 fn setup_openvr_connector(world: &mut World) {
@@ -137,14 +204,21 @@ fn update_pose_data(
                 pose_data.hmd = TrackedDevicePose::from(pose);
             }
             openvr::TrackedDeviceClass::Controller => {
-                let controller_state: Option<ControllerState> =
-                    system.controller_state(i as u32).map(|cs| ControllerState::from(&cs));
+                let openvr_controller_state = system.controller_state(i as u32);
                 if i == left_controller_index {
+                    update_controller_button_state_event(
+                        &mut pose_data.left_controller_button_state,
+                        &mut pose_data.left_controller_button_events,
+                        &openvr_controller_state,
+                    );
                     pose_data.left_controller = TrackedDevicePose::from(pose);
-                    pose_data.left_controller.controller_state = controller_state;
                 } else if i == right_controller_index {
+                    update_controller_button_state_event(
+                        &mut pose_data.right_controller_button_state,
+                        &mut pose_data.right_controller_button_events,
+                        &openvr_controller_state,
+                    );
                     pose_data.right_controller = TrackedDevicePose::from(pose);
-                    pose_data.right_controller.controller_state = controller_state;
                 }
             }
             _ => (), // skip other tracking data

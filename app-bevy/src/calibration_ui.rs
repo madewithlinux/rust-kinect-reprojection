@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy::math::{vec2, vec3};
 use bevy::prelude::*;
 use bevy::render::camera::Viewport;
@@ -11,8 +13,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::app_settings::AppSettings;
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
-use crate::receiver::KinectFrameBuffers;
-use crate::vr_connector::{ControllerState, OpenVrPoseData};
+use crate::gui_common::GuiViewable;
+use crate::receiver::{KinectDepthTransformer, KinectFrameBuffers};
+use crate::vr_connector::{ControllerButtonEvents, ControllerButtonState, LeftOrRightController, OpenVrPoseData};
 use crate::{MainCamera, COLOR_HEIGHT, COLOR_WIDTH};
 
 pub struct AppCalibrationUiPlugin;
@@ -23,6 +26,7 @@ impl Plugin for AppCalibrationUiPlugin {
             .add_plugin(bevy_egui::EguiPlugin)
             .insert_resource(UiState::new())
             .init_resource::<CalibrationUiState>()
+            .init_resource::<CalibrationProcedureState>()
             .add_system_to_stage(CoreStage::PreUpdate, show_ui_system.at_end())
             //
             .add_startup_system(set_egui_scale_factor)
@@ -35,6 +39,7 @@ impl Plugin for AppCalibrationUiPlugin {
             .add_system(update_cursor_sprite_transform)
             //
             .add_system(update_calibration_ui)
+            .add_system(calibration_procedure_system)
             //
             .register_type::<FrameBufferImageHandle>()
             .register_type::<Option<Handle<Image>>>()
@@ -202,7 +207,7 @@ fn spawn_rgba_sprite(mut commands: Commands, mut images: ResMut<Assets<Image>>) 
         SpriteBundle {
             sprite: Sprite {
                 // TODO: is this the right place to flip the x axis? or should we flip it as part of the transform of the camera, or something?
-                flip_x: true,
+                // flip_x: true,
                 ..default()
             },
             texture: color_image_handle,
@@ -220,6 +225,12 @@ struct CursorImage(Handle<Image>);
 
 #[derive(Component, Reflect, Debug)]
 pub struct CursorPixelPosition(Vec2);
+
+impl CursorPixelPosition {
+    pub fn to_usize_pair(&self) -> (usize, usize) {
+        (self.0.x.round() as usize, self.0.y.round() as usize)
+    }
+}
 
 impl CursorPixelPosition {
     pub fn from_coordinate(i: usize, j: usize) -> Self {
@@ -314,21 +325,16 @@ fn update_cursor_sprite_transform(mut cursor_query: Query<(&CursorPixelPosition,
 
 // region: calibration UI
 
-#[derive(Reflect, Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum LeftOrRightController {
-    #[default]
-    Left,
-    Right,
-}
-
 #[derive(Reflect, Debug, Clone, Serialize, Deserialize)]
 pub struct CalibrationSampleParams {
-    pub subsample_time_ms: usize,
+    pub wait_before_sample_ms: u64,
+    pub subsample_time_ms: u64,
     pub depth_sample_radius: f32,
 }
 impl Default for CalibrationSampleParams {
     fn default() -> Self {
         Self {
+            wait_before_sample_ms: 100,
             subsample_time_ms: 650,
             depth_sample_radius: 0.0,
         }
@@ -341,39 +347,25 @@ pub struct CalibrationSample {
     pub pixel_position: (usize, usize),
     pub depth_mm: f32,
     pub openvr_position: Vec3,
+    pub depth_sample_count: usize,
+    pub openvr_position_sample_count: usize,
 }
-
-#[derive(Reflect, Debug, Default, Clone, Serialize, Deserialize)]
-pub enum CalibrationProcedureStep {
-    #[default]
-    Ready,
-    Sampling,
-}
-
-#[derive(Debug, Default, Copy, Clone, Reflect)]
-#[reflect(Debug)]
-pub struct ControllerButtonEvents {
-    pub menu_just_pressed: bool,
-    pub menu_just_released: bool,
-    pub back_just_pressed: bool,
-    pub back_just_released: bool,
-    pub trigger_just_pressed: bool,
-    pub trigger_just_released: bool,
-    pub touchpad_just_pressed: bool,
-    pub touchpad_just_released: bool,
-}
-
-impl ControllerButtonEvents {
-    pub fn from_current_prev_state(prev: &ControllerState, current: &ControllerState) -> Self {
+impl CalibrationSample {
+    pub fn from_subsamples(
+        pixel_position: (usize, usize),
+        depth_subsamples: &[f32],
+        openvr_position_subsamples: &[Vec3],
+    ) -> Self {
+        let depth_sample_count = depth_subsamples.len();
+        let depth_mm = depth_subsamples.iter().sum::<f32>() / (depth_sample_count as f32);
+        let openvr_position_sample_count = openvr_position_subsamples.len();
+        let openvr_position = openvr_position_subsamples.iter().sum::<Vec3>() / (openvr_position_sample_count as f32);
         Self {
-            menu_just_released: prev.menu_pressed && !current.menu_pressed,
-            menu_just_pressed: !prev.menu_pressed && current.menu_pressed,
-            back_just_released: prev.back_pressed && !current.back_pressed,
-            back_just_pressed: !prev.back_pressed && current.back_pressed,
-            trigger_just_released: prev.trigger_pressed && !current.trigger_pressed,
-            trigger_just_pressed: !prev.trigger_pressed && current.trigger_pressed,
-            touchpad_just_released: prev.touchpad_pressed && !current.touchpad_pressed,
-            touchpad_just_pressed: !prev.touchpad_pressed && current.touchpad_pressed,
+            pixel_position,
+            depth_mm,
+            openvr_position,
+            depth_sample_count,
+            openvr_position_sample_count,
         }
     }
 }
@@ -382,23 +374,17 @@ impl ControllerButtonEvents {
 pub struct CalibrationUiState {
     pub left_or_right_controller: LeftOrRightController,
     pub sample_params: CalibrationSampleParams,
-    pub current_step: CalibrationProcedureStep,
     pub points_to_sample: Vec<(usize, usize)>,
-    // TODO: why can't this field reflect?
-    #[reflect(ignore)]
-    pub samples: Vec<CalibrationSample>,
-    pub controller_state: ControllerState,
+    pub controller_state: ControllerButtonState,
     pub controller_button_events: ControllerButtonEvents,
     pub controller_position: Vec3,
 }
-
 impl FromWorld for CalibrationUiState {
     fn from_world(world: &mut World) -> Self {
         Self {
             left_or_right_controller: default(),
             sample_params: default(),
-            samples: default(),
-            current_step: default(),
+            // current_step: default(),
             points_to_sample: vec![
                 (COLOR_WIDTH / 2, COLOR_HEIGHT / 2),
                 (COLOR_WIDTH / 2, COLOR_HEIGHT / 2),
@@ -410,17 +396,27 @@ impl FromWorld for CalibrationUiState {
         }
     }
 }
-
 impl CalibrationUiState {
     fn ui(&mut self, world: &mut World, ui: &mut Ui) {
         Grid::new("calibration ui grid").striped(true).show(ui, |ui| {
             ui.label("controller");
             bevy_inspector::ui_for_value(&mut self.left_or_right_controller, ui, world);
             ui.end_row();
-
-            ui.label("current step");
-            ui.label(format!("{:?}", self.current_step));
+            ui.label("controller position");
+            self.controller_position.gui_view(ui);
             ui.end_row();
+
+            let is_initial_state = world.resource::<CalibrationProcedureState>().current_step == ProcedureStep::Idle;
+            if ui.add_enabled(is_initial_state, Button::new("start")).clicked() {
+                self.start_calibration_procedure(world);
+            };
+            if ui.button("reset and restart").clicked() {
+                self.reset_calibration_procedure(world);
+            };
+
+            // ui.label("current step");
+            // ui.label(format!("{:?}", self.current_step));
+            // ui.end_row();
 
             // ui.label("sample params");
             // bevy_inspector::ui_for_value(&mut self.sample_params, ui, world);
@@ -431,10 +427,21 @@ impl CalibrationUiState {
             // ui.end_row();
         });
 
+        CollapsingHeader::new("calibration procedure")
+            .default_open(true)
+            .show(ui, |ui| {
+                let procedure_state = world.resource::<CalibrationProcedureState>();
+                procedure_state.gui_view(ui);
+            });
+
         CollapsingHeader::new("controller state")
             .default_open(false)
             .show(ui, |ui| {
-                Grid::new("calibration ui grid").striped(true).show(ui, |ui| {
+                Grid::new("controller state grid").striped(true).show(ui, |ui| {
+                    ui.label("position");
+                    self.controller_position.gui_view(ui);
+                    ui.end_row();
+
                     let button_constants = [
                         (self.controller_state.menu_pressed, "menu"),
                         (self.controller_state.back_pressed, "back"),
@@ -446,47 +453,28 @@ impl CalibrationUiState {
                         ui.label(if *pressed { "pressed" } else { "" });
                         ui.end_row();
                     }
-
-                    // let button_constants = [
-                    //     (openvr::button_id::SYSTEM, "SYSTEM"),
-                    //     (openvr::button_id::APPLICATION_MENU, "APPLICATION_MENU"),
-                    //     (openvr::button_id::GRIP, "GRIP"),
-                    //     (openvr::button_id::DPAD_LEFT, "DPAD_LEFT"),
-                    //     (openvr::button_id::DPAD_UP, "DPAD_UP"),
-                    //     (openvr::button_id::DPAD_RIGHT, "DPAD_RIGHT"),
-                    //     (openvr::button_id::DPAD_DOWN, "DPAD_DOWN"),
-                    //     (openvr::button_id::A, "A"),
-                    //     (openvr::button_id::PROXIMITY_SENSOR, "PROXIMITY_SENSOR"),
-                    //     (openvr::button_id::AXIS0, "AXIS0"),
-                    //     (openvr::button_id::AXIS1, "AXIS1"),
-                    //     (openvr::button_id::AXIS2, "AXIS2"),
-                    //     (openvr::button_id::AXIS3, "AXIS3"),
-                    //     (openvr::button_id::AXIS4, "AXIS4"),
-                    //     (openvr::button_id::STEAM_VR_TOUCHPAD, "STEAM_VR_TOUCHPAD"),
-                    //     (openvr::button_id::STEAM_VR_TRIGGER, "STEAM_VR_TRIGGER"),
-                    //     (openvr::button_id::DASHBOARD_BACK, "DASHBOARD_BACK"),
-                    //     (openvr::button_id::MAX, "MAX"),
-                    // ];
-                    // for (id, name) in button_constants.iter() {
-                    //     ui.label(*name);
-                    //     ui.label(if *id > 63 {
-                    //         format!("id {:?}", id)
-                    //     } else if (self.controller_state.button_pressed & (1 << *id)) != 0 {
-                    //         "pressed".to_owned()
-                    //     } else {
-                    //         "".to_owned()
-                    //     });
-                    //     ui.end_row();
-                    // }
                 });
                 // ui.label("state");
                 // bevy_inspector::ui_for_value(&mut self.controller_state, ui, world);
-                // ui.label("events");
-                // bevy_inspector::ui_for_value(&mut self.controller_button_events, ui, world);
-                ui.label("position");
-                bevy_inspector::ui_for_value(&mut self.controller_position, ui, world);
+                ui.label("events");
+                bevy_inspector::ui_for_value(&mut self.controller_button_events, ui, world);
+                // ui.label("position");
+                // bevy_inspector::ui_for_value(&mut self.controller_position, ui, world);
             });
-        // bevy_inspector::ui_for_value(&mut self.samples, ui, world);
+    }
+
+    fn start_calibration_procedure(&mut self, world: &mut World) {
+        let mut procedure_state = world.resource_mut::<CalibrationProcedureState>();
+        *procedure_state = default();
+        procedure_state.left_or_right_controller = self.left_or_right_controller;
+        procedure_state.sample_params = self.sample_params.clone();
+        procedure_state.remaining_points_to_sample = self.points_to_sample.clone();
+        procedure_state.current_step = ProcedureStep::WaitForTriggerRelease;
+    }
+
+    fn reset_calibration_procedure(&mut self, world: &mut World) {
+        let mut procedure_state = world.resource_mut::<CalibrationProcedureState>();
+        *procedure_state = default();
     }
 }
 
@@ -497,27 +485,199 @@ fn update_calibration_ui(
     // settings: Res<AppSettings>,
     vr_pose_data: Res<OpenVrPoseData>,
     mut cal_ui_state: ResMut<CalibrationUiState>,
-    mut prev_controller_state: Local<ControllerState>,
 ) {
-    let selected_controller = match cal_ui_state.left_or_right_controller {
-        LeftOrRightController::Left => vr_pose_data.left_controller.clone(),
-        LeftOrRightController::Right => vr_pose_data.right_controller.clone(),
-    };
-    let Some(controller_state) = selected_controller.controller_state else {
-        return;
-    };
-    cal_ui_state.controller_state = controller_state;
-    cal_ui_state.controller_position = selected_controller.position;
+    let (controller_pose, controller_state, controller_events) =
+        vr_pose_data.get_controller_data(cal_ui_state.left_or_right_controller);
+    cal_ui_state.controller_state = *controller_state;
+    cal_ui_state.controller_position = controller_pose.position;
+    cal_ui_state.controller_button_events = controller_events.clone();
+}
 
-    // prev state wasn't initialized yet, so we will reset the state
-    if prev_controller_state.packet_num == 0 {
-        *prev_controller_state = controller_state;
-        return;
+#[derive(Reflect, Debug, Default, Copy, Clone, PartialEq)]
+pub enum ProcedureStep {
+    #[default]
+    Idle,
+    WaitForTriggerRelease,
+    WaitForTriggerPress,
+    WaitBeforeSample(u64),
+    Sampling {
+        pixel_position: (usize, usize),
+        ms: u64,
+    },
+    Done,
+}
+
+#[derive(Resource, Debug, Clone, Default)]
+pub struct CalibrationProcedureState {
+    pub left_or_right_controller: LeftOrRightController,
+    pub sample_params: CalibrationSampleParams,
+    pub current_step: ProcedureStep,
+    //
+    pub remaining_points_to_sample: Vec<(usize, usize)>,
+    pub samples: Vec<CalibrationSample>,
+    //
+    pub subsamples_openvr_position: Vec<Vec3>,
+    pub subsamples_depth: Vec<f32>,
+}
+
+fn calibration_procedure_system(
+    time: Res<Time>,
+    buffers: Res<KinectFrameBuffers>,
+    depth_transformer: Res<KinectDepthTransformer>,
+    // frame_delay_buffer: Res<KinectFrameDataDelayBufferV2>,
+    // settings: Res<AppSettings>,
+    vr_pose_data: Res<OpenVrPoseData>,
+    mut cursor_query: Query<&mut CursorPixelPosition>,
+    // cal_ui_state: Res<CalibrationUiState>,
+    mut state: ResMut<CalibrationProcedureState>,
+) {
+    // gather info for state logic
+    let time_delta_ms = time.delta().as_millis() as u64;
+    let (controller_pose, controller_state, controller_events) =
+        vr_pose_data.get_controller_data(state.left_or_right_controller);
+    let cursor_pos = cursor_query.single().to_usize_pair();
+    // TODO: subsample in a radius around cursor_pos
+    let cursor_depth = buffers.depth[depth_transformer.ij_to_flat_index(cursor_pos.0, cursor_pos.1)];
+
+    // advance state
+    let current_step = state.current_step;
+    let next_step = match current_step {
+        ProcedureStep::Idle => ProcedureStep::Idle,
+        // _ if state.remaining_points_to_sample.is_empty() => ProcedureStep::Done,
+        ProcedureStep::WaitForTriggerRelease if controller_state.trigger_pressed => {
+            ProcedureStep::WaitForTriggerRelease
+        }
+        ProcedureStep::WaitForTriggerRelease if state.remaining_points_to_sample.is_empty() => ProcedureStep::Done,
+        ProcedureStep::WaitForTriggerRelease if !controller_state.trigger_pressed => ProcedureStep::WaitForTriggerPress,
+        ProcedureStep::WaitForTriggerPress if !controller_events.trigger_just_pressed => {
+            let pixel_position = state.remaining_points_to_sample[0];
+            *cursor_query.single_mut() = CursorPixelPosition::from(pixel_position);
+            ProcedureStep::WaitForTriggerPress
+        }
+        ProcedureStep::WaitForTriggerPress if controller_events.trigger_just_pressed => {
+            state.subsamples_depth.clear();
+            state.subsamples_openvr_position.clear();
+            ProcedureStep::WaitBeforeSample(0)
+        }
+        ProcedureStep::WaitBeforeSample(ms) if ms < state.sample_params.wait_before_sample_ms => {
+            ProcedureStep::WaitBeforeSample(ms + time_delta_ms)
+        }
+        ProcedureStep::WaitBeforeSample(ms) if ms >= state.sample_params.wait_before_sample_ms => {
+            ProcedureStep::Sampling {
+                pixel_position: cursor_pos,
+                ms: 0,
+            }
+        }
+        ProcedureStep::Sampling { pixel_position, ms } if ms < state.sample_params.subsample_time_ms => {
+            state.subsamples_openvr_position.push(controller_pose.position);
+            // TODO: only sample depth if it has changed since last subsample?
+            if cursor_depth > 0 {
+                state.subsamples_depth.push(cursor_depth as f32);
+            }
+            ProcedureStep::Sampling {
+                pixel_position,
+                ms: ms + time_delta_ms,
+            }
+        }
+        ProcedureStep::Sampling { pixel_position, ms } if ms >= state.sample_params.subsample_time_ms => {
+            assert_eq!(state.remaining_points_to_sample[0], pixel_position);
+            let sample = CalibrationSample::from_subsamples(
+                pixel_position,
+                &state.subsamples_depth,
+                &state.subsamples_openvr_position,
+            );
+            state.samples.push(sample);
+            state.remaining_points_to_sample.remove(0);
+            ProcedureStep::WaitForTriggerRelease
+        }
+        o => o,
+    };
+    state.current_step = next_step;
+}
+
+// endregion
+
+// region: GuiViewable impls
+impl GuiViewable for LeftOrRightController {
+    fn gui_view(&self, ui: &mut Ui) -> egui::Response {
+        ui.label(format!("{:?}", self))
     }
-    cal_ui_state.controller_button_events =
-        ControllerButtonEvents::from_current_prev_state(&prev_controller_state, &controller_state);
+}
+impl GuiViewable for ProcedureStep {
+    fn gui_view(&self, ui: &mut Ui) -> egui::Response {
+        ui.label(format!("{:?}", self))
+    }
+}
+impl GuiViewable for CalibrationSample {
+    fn gui_view(&self, ui: &mut Ui) -> egui::Response {
+        ui.label(format!("{:?}", self))
+    }
+}
+impl GuiViewable for CalibrationProcedureState {
+    fn gui_view(&self, ui: &mut Ui) -> egui::Response {
+        ui.vertical(|ui| {
+            Grid::new("controller state grid")
+                .striped(true)
+                .num_columns(2)
+                .show(ui, |ui| {
+                    ui.label("left_or_right_controller");
+                    self.left_or_right_controller.gui_view(ui);
+                    ui.end_row();
 
-    *prev_controller_state = controller_state;
+                    ui.label("current_step");
+                    self.current_step.gui_view(ui);
+                    ui.end_row();
+
+                    ui.label("sample_params");
+                    ui.end_row();
+                    ui.label("wait_before_sample_ms");
+                    self.sample_params.wait_before_sample_ms.gui_view(ui);
+                    ui.end_row();
+                    ui.label("subsample_time_ms");
+                    self.sample_params.subsample_time_ms.gui_view(ui);
+                    ui.end_row();
+                    ui.label("depth_sample_radius");
+                    self.sample_params.depth_sample_radius.gui_view(ui);
+                    ui.end_row();
+                    ui.separator();
+                    ui.end_row();
+
+                    ui.label("remaining_points_to_sample");
+                    if self.remaining_points_to_sample.is_empty() {
+                        ui.label("none");
+                        ui.end_row();
+                    } else {
+                        for point in self.remaining_points_to_sample.iter() {
+                            point.gui_view(ui);
+                            ui.end_row();
+                        }
+                    }
+                    ui.separator();
+                    ui.end_row();
+
+                    ui.label("subsamples_openvr_position.len()");
+                    self.subsamples_openvr_position.len().gui_view(ui);
+                    ui.end_row();
+                    ui.label("subsamples_depth.len()");
+                    self.subsamples_depth.len().gui_view(ui);
+                    ui.end_row();
+                });
+
+            ui.label("samples");
+            let mut samples_pretty_json = serde_json::to_string_pretty(&self.samples).unwrap();
+            ui.text_edit_multiline(&mut samples_pretty_json);
+            // Grid::new("samples grid").striped(true).num_columns(5).show(ui, |ui| {
+            //     for sample in self.samples.iter() {
+            //         sample.pixel_position.gui_view(ui);
+            //         sample.depth_mm.gui_view(ui);
+            //         sample.openvr_position.gui_view(ui);
+            //         sample.depth_sample_count.gui_view(ui);
+            //         sample.openvr_position_sample_count.gui_view(ui);
+            //     }
+            // });
+        })
+        .response
+    }
 }
 
 // endregion

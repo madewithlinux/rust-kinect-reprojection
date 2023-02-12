@@ -24,6 +24,8 @@ pub mod game_ui;
 pub mod vr_connector;
 #[cfg(feature = "calibration")]
 pub mod calibration_ui;
+#[cfg(feature = "calibration")]
+pub mod gui_common;
 
 pub const COLOR_WIDTH: usize = 640;
 pub const COLOR_HEIGHT: usize = 480;

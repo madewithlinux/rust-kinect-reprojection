@@ -9,7 +9,7 @@
   "camera2_vmc_enabled": false,
   "history_buffer_size": 2,
   "fixed_delay_ms": 0,
-  "kinect_static_frame": "kinect_framebuffers.json",
+  "no kinect_static_frame": "kinect_framebuffers.json",
   "show_debug_axes": true,
   "show_debug_entities": true,
   "show_debug_skeleton": true,
