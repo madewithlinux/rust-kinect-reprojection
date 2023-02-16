@@ -346,25 +346,32 @@ impl Default for CalibrationSampleParams {
 pub struct CalibrationSample {
     pub pixel_position: (usize, usize),
     pub depth_mm: f32,
+    pub skeleton_point: Vec3,
     pub openvr_position: Vec3,
     pub depth_sample_count: usize,
+    pub skeleton_point_sample_count: usize,
     pub openvr_position_sample_count: usize,
 }
 impl CalibrationSample {
     pub fn from_subsamples(
         pixel_position: (usize, usize),
         depth_subsamples: &[f32],
+        skeleton_point_subsamples: &[Vec3],
         openvr_position_subsamples: &[Vec3],
     ) -> Self {
         let depth_sample_count = depth_subsamples.len();
         let depth_mm = depth_subsamples.iter().sum::<f32>() / (depth_sample_count as f32);
         let openvr_position_sample_count = openvr_position_subsamples.len();
         let openvr_position = openvr_position_subsamples.iter().sum::<Vec3>() / (openvr_position_sample_count as f32);
+        let skeleton_point_sample_count = skeleton_point_subsamples.len();
+        let skeleton_point = skeleton_point_subsamples.iter().sum::<Vec3>() / (skeleton_point_sample_count as f32);
         Self {
             pixel_position,
             depth_mm,
+            skeleton_point,
             openvr_position,
             depth_sample_count,
+            skeleton_point_sample_count,
             openvr_position_sample_count,
         }
     }
@@ -380,16 +387,27 @@ pub struct CalibrationUiState {
     pub controller_position: Vec3,
 }
 impl FromWorld for CalibrationUiState {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(_world: &mut World) -> Self {
+        let points_to_sample = [(0.8, 0.8), (0.8, 0.2), (0.2, 0.8), (0.2, 0.2), (0.5, 0.5)]
+            .iter()
+            .map(|(a, b)| {
+                (
+                    (a * (COLOR_WIDTH as f32)).round() as usize,
+                    (b * (COLOR_HEIGHT as f32)).round() as usize,
+                )
+            })
+            .flat_map(|p| [p, p])
+            .collect_vec();
         Self {
             left_or_right_controller: default(),
             sample_params: default(),
             // current_step: default(),
-            points_to_sample: vec![
-                (COLOR_WIDTH / 2, COLOR_HEIGHT / 2),
-                (COLOR_WIDTH / 2, COLOR_HEIGHT / 2),
-                (COLOR_WIDTH / 2, COLOR_HEIGHT / 4),
-            ],
+            points_to_sample,
+            // points_to_sample: vec![
+            //     (COLOR_WIDTH / 2, COLOR_HEIGHT / 2),
+            //     (COLOR_WIDTH / 2, COLOR_HEIGHT / 2),
+            //     (COLOR_WIDTH / 2, COLOR_HEIGHT / 4),
+            // ],
             controller_state: default(),
             controller_button_events: default(),
             controller_position: default(),
@@ -516,8 +534,9 @@ pub struct CalibrationProcedureState {
     pub remaining_points_to_sample: Vec<(usize, usize)>,
     pub samples: Vec<CalibrationSample>,
     //
-    pub subsamples_openvr_position: Vec<Vec3>,
     pub subsamples_depth: Vec<f32>,
+    pub subsamples_skeleton_point: Vec<Vec3>,
+    pub subsamples_openvr_position: Vec<Vec3>,
 }
 
 fn calibration_procedure_system(
@@ -537,7 +556,9 @@ fn calibration_procedure_system(
         vr_pose_data.get_controller_data(state.left_or_right_controller);
     let cursor_pos = cursor_query.single().to_usize_pair();
     // TODO: subsample in a radius around cursor_pos
-    let cursor_depth = buffers.depth[depth_transformer.ij_to_flat_index(cursor_pos.0, cursor_pos.1)];
+    let flat_index = depth_transformer.ij_to_flat_index(cursor_pos.0, cursor_pos.1);
+    let cursor_depth = buffers.depth[flat_index];
+    let cursor_skeleton_point = buffers.skeleton_points[flat_index];
 
     // advance state
     let current_step = state.current_step;
@@ -556,6 +577,7 @@ fn calibration_procedure_system(
         }
         ProcedureStep::WaitForTriggerPress if controller_events.trigger_just_pressed => {
             state.subsamples_depth.clear();
+            state.subsamples_skeleton_point.clear();
             state.subsamples_openvr_position.clear();
             ProcedureStep::WaitBeforeSample(0)
         }
@@ -574,6 +596,9 @@ fn calibration_procedure_system(
             if cursor_depth > 0 {
                 state.subsamples_depth.push(cursor_depth as f32);
             }
+            if cursor_skeleton_point != Vec3::ZERO {
+                state.subsamples_skeleton_point.push(cursor_skeleton_point);
+            }
             ProcedureStep::Sampling {
                 pixel_position,
                 ms: ms + time_delta_ms,
@@ -584,6 +609,7 @@ fn calibration_procedure_system(
             let sample = CalibrationSample::from_subsamples(
                 pixel_position,
                 &state.subsamples_depth,
+                &state.subsamples_skeleton_point,
                 &state.subsamples_openvr_position,
             );
             state.samples.push(sample);
@@ -655,17 +681,24 @@ impl GuiViewable for CalibrationProcedureState {
                     ui.separator();
                     ui.end_row();
 
-                    ui.label("subsamples_openvr_position.len()");
-                    self.subsamples_openvr_position.len().gui_view(ui);
-                    ui.end_row();
                     ui.label("subsamples_depth.len()");
                     self.subsamples_depth.len().gui_view(ui);
                     ui.end_row();
+                    ui.label("subsamples_skeleton_point.len()");
+                    self.subsamples_skeleton_point.len().gui_view(ui);
+                    ui.end_row();
+                    ui.label("subsamples_openvr_position.len()");
+                    self.subsamples_openvr_position.len().gui_view(ui);
+                    ui.end_row();
                 });
 
-            ui.label("samples");
-            let mut samples_pretty_json = serde_json::to_string_pretty(&self.samples).unwrap();
-            ui.text_edit_multiline(&mut samples_pretty_json);
+            // ui.label("samples");
+            CollapsingHeader::new("calibration samples json")
+                .default_open(false)
+                .show(ui, |ui| {
+                    let mut samples_pretty_json = serde_json::to_string_pretty(&self.samples).unwrap();
+                    ui.text_edit_multiline(&mut samples_pretty_json);
+                });
             // Grid::new("samples grid").striped(true).num_columns(5).show(ui, |ui| {
             //     for sample in self.samples.iter() {
             //         sample.pixel_position.gui_view(ui);

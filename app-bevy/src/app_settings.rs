@@ -25,9 +25,13 @@ pub struct KinectTransform {
     pub euler_rotation: Vec3,
     /// scale should probably always be [1.0, 1.0, 1.0] (the default value)
     pub scale: Vec3,
+    pub raw_transform: Option<Affine3A>,
 }
 impl KinectTransform {
     pub fn to_affine(&self) -> Affine3A {
+        if let Some(raw_transform) = self.raw_transform {
+            return raw_transform;
+        }
         Affine3A::from_scale_rotation_translation(
             self.scale,
             Quat::from_euler(
@@ -46,6 +50,7 @@ impl Default for KinectTransform {
             position: Vec3::ZERO,
             euler_rotation: Vec3::ZERO,
             scale: Vec3::ONE,
+            raw_transform: None,
         }
     }
 }

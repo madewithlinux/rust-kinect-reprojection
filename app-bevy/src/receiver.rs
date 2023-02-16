@@ -32,9 +32,9 @@ pub struct KinectDepthTransformer {
     pub width: f32,
     pub height: f32,
     // these values are updated from AppSettings whenever it changes
-    pub kinect_position: Vec3,
-    pub kinect_rot_deg: Vec3,
-    pub kinect_scale: Vec3,
+    // pub kinect_position: Vec3,
+    // pub kinect_rot_deg: Vec3,
+    // pub kinect_scale: Vec3,
     pub point_transform_matrix: Affine3A,
     point_transform_matrix_inverse: Affine3A,
     pub point_cloud_skel: bool,
@@ -44,29 +44,34 @@ fn update_depth_transformer(mut kdt: ResMut<KinectDepthTransformer>, settings: R
         return;
     }
 
-    kdt.kinect_position = settings.kinect_transform.position;
-    kdt.kinect_rot_deg = settings.kinect_transform.euler_rotation;
-    kdt.kinect_scale = settings.kinect_transform.scale;
+    // kdt.kinect_position = settings.kinect_transform.position;
+    // kdt.kinect_rot_deg = settings.kinect_transform.euler_rotation;
+    // kdt.kinect_scale = settings.kinect_transform.scale;
 
-    kdt.point_transform_matrix = Affine3A::from_scale_rotation_translation(
-        kdt.kinect_scale,
-        Quat::from_euler(
-            EulerRot::XYZ,
-            kdt.kinect_rot_deg.x * PI / 180.0,
-            kdt.kinect_rot_deg.y * PI / 180.0,
-            kdt.kinect_rot_deg.z * PI / 180.0,
-        ),
-        kdt.kinect_position,
-    );
+    // kdt.point_transform_matrix = Affine3A::from_scale_rotation_translation(
+    //     kdt.kinect_scale,
+    //     Quat::from_euler(
+    //         EulerRot::XYZ,
+    //         kdt.kinect_rot_deg.x * PI / 180.0,
+    //         kdt.kinect_rot_deg.y * PI / 180.0,
+    //         kdt.kinect_rot_deg.z * PI / 180.0,
+    //     ),
+    //     kdt.kinect_position,
+    // );
+    kdt.point_transform_matrix = settings.kinect_transform.to_affine();
     kdt.point_transform_matrix_inverse = kdt.point_transform_matrix.inverse();
 }
 impl FromWorld for KinectDepthTransformer {
     fn from_world(world: &mut World) -> Self {
         let settings = world.resource::<AppSettings>();
+        let point_transform_matrix = settings.kinect_transform.to_affine();
+        let point_transform_matrix_inverse = point_transform_matrix.inverse();
         Self {
-            kinect_position: settings.kinect_transform.position,
-            kinect_rot_deg: settings.kinect_transform.euler_rotation,
-            kinect_scale: settings.kinect_transform.scale,
+            // kinect_position: settings.kinect_transform.position,
+            // kinect_rot_deg: settings.kinect_transform.euler_rotation,
+            // kinect_scale: settings.kinect_transform.scale,
+            point_transform_matrix,
+            point_transform_matrix_inverse,
             ..Self::new()
         }
     }
@@ -77,9 +82,9 @@ impl KinectDepthTransformer {
             pixel_width: DEPTH_WIDTH,
             width: DEPTH_WIDTH as f32,
             height: DEPTH_HEIGHT as f32,
-            kinect_position: Vec3::new(0.18, 2.4273, 1.9451),
-            kinect_rot_deg: Vec3::new(-33.0, 180.0, 0.0),
-            kinect_scale: Vec3::new(1.0, 1.0, 1.0),
+            // kinect_position: Vec3::new(0.18, 2.4273, 1.9451),
+            // kinect_rot_deg: Vec3::new(-33.0, 180.0, 0.0),
+            // kinect_scale: Vec3::new(1.0, 1.0, 1.0),
             point_transform_matrix: Affine3A::IDENTITY,
             point_transform_matrix_inverse: Affine3A::IDENTITY,
             point_cloud_skel: true,

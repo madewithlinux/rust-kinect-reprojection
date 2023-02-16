@@ -63,6 +63,8 @@ fn main() {
             euler_angles.2 * 180.0 / PI,
         ),
         scale,
+        ..Default::default()
     };
     println!("{}", serde_json::to_string_pretty(&kinect_transform).unwrap());
+    println!("{}", serde_json::to_string_pretty(&transform).unwrap());
 }
