@@ -34,7 +34,6 @@ pub struct Camera2ViewRect {
     width: f32,
     height: f32,
 }
-
 impl Default for Camera2ViewRect {
     fn default() -> Self {
         Self {
@@ -45,6 +44,23 @@ impl Default for Camera2ViewRect {
         }
     }
 }
+impl Camera2ViewRect {
+    fn set_camera_settings(&self, camera: &mut Camera) {
+        let Some(target_size) = camera.physical_target_size() else {
+            return
+        };
+        let target_size = target_size.as_vec2();
+        // in camera2, x/y 0/0 is the bottom left corner of the window
+        let physical_position = vec2(self.x, 1.0 - self.y - self.height) * target_size;
+        let physical_size = vec2(self.width, self.height) * target_size;
+
+        camera.viewport = Some(Viewport {
+            physical_position: physical_position.as_uvec2(),
+            physical_size: physical_size.as_uvec2(),
+            depth: 0.0..1.0,
+        });
+    }
+}
 
 #[derive(Resource, Debug, Default, Copy, Clone, Reflect, Serialize, Deserialize)]
 #[reflect(Debug, Resource)]
@@ -52,24 +68,10 @@ pub struct VmcCameraInfo {
     pub translation: Vec3,
     pub rotation: Quat,
     pub fov: f32,
-    pub view_rect: Camera2ViewRect,
 }
 
 impl VmcCameraInfo {
-    fn set_camera_settings(&self, camera: &mut Camera, transform: &mut Transform, projection: &mut Projection) {
-        let Some(target_size) = camera.physical_target_size() else {
-            return
-        };
-        let target_size = target_size.as_vec2();
-        // in camera2, x/y 0/0 is the bottom left corner of the window
-        let physical_position = vec2(self.view_rect.x, 1.0 - self.view_rect.y - self.view_rect.height) * target_size;
-        let physical_size = vec2(self.view_rect.width, self.view_rect.height) * target_size;
-
-        camera.viewport = Some(Viewport {
-            physical_position: physical_position.as_uvec2(),
-            physical_size: physical_size.as_uvec2(),
-            depth: 0.0..1.0,
-        });
+    fn set_camera_settings(&self, transform: &mut Transform, projection: &mut Projection) {
         *transform = Transform::from_translation(self.translation).with_rotation(self.rotation);
         *projection = PerspectiveProjection {
             fov: self.fov * PI / 180.0,
@@ -81,7 +83,7 @@ impl VmcCameraInfo {
 
 #[derive(Component, Debug, Default, Clone, Reflect)]
 #[reflect(Debug, Component)]
-pub struct VmcCameraMarker;
+pub struct VmcCameraMarker(Camera2ViewRect);
 
 #[derive(Resource, Debug, Default, Clone)]
 struct CameraReceiverBuffer(DelayBuffer<VmcCameraInfo>);
@@ -109,7 +111,7 @@ impl Plugin for OscReceiverPlugin {
 pub fn spawn_3d_camera(mut commands: Commands) {
     commands.spawn((
         MainCamera,
-        VmcCameraMarker,
+        VmcCameraMarker::default(),
         Camera3dBundle {
             transform: Transform::from_translation(Vec3::new(0.5, 3.6, 2.6))
                 .looking_at(Vec3::new(0.0, 0.0, -0.8), Vec3::Y),
@@ -125,11 +127,11 @@ const CAMERA2_VMC_ADDR: &str = "/VMC/Ext/Cam";
 fn osc_transform_watcher(
     mut receive_buffer: ResMut<CameraReceiverBuffer>,
     settings: Res<AppSettings>,
-    mut camera_query: Query<(&mut Camera, &mut Transform, &mut Projection), With<VmcCameraMarker>>,
+    mut camera_query: Query<(&mut Transform, &mut Projection), With<VmcCameraMarker>>,
 ) {
     let Some(vmc_camera_info) = receive_buffer.0.pop_for_delay(settings.fixed_delay_ms) else { return; };
-    let (mut camera, mut transform, mut projection) = camera_query.single_mut();
-    vmc_camera_info.set_camera_settings(&mut camera, &mut transform, &mut projection);
+    let (mut transform, mut projection) = camera_query.single_mut();
+    vmc_camera_info.set_camera_settings(&mut transform, &mut projection);
 }
 
 fn osc_event_listener_system(
@@ -139,12 +141,6 @@ fn osc_event_listener_system(
     settings: Res<AppSettings>,
 ) {
     let timestamp = query_performance_counter_ms();
-
-    // the camera viewRect isn't sent via VMC/OSC, so we need to just re-use whatever is the existing one.
-    let view_rect = match receive_buffer.0.front() {
-        Some(camera_config) => camera_config.view_rect,
-        None => default(),
-    };
 
     for event in events.iter() {
         // info!("osc event: {:?}", &event.packet);
@@ -175,7 +171,6 @@ fn osc_event_listener_system(
                                 translation,
                                 rotation,
                                 fov: *fov,
-                                view_rect,
                             },
                         );
                     }
@@ -270,7 +265,7 @@ struct JsonSceneConfig {
 /// and has type = Positionable and VMCProtocol.mode = Sender
 pub fn read_camera2_info_from_config_files(
     camera2_settings_folder: impl AsRef<std::path::Path>,
-) -> anyhow::Result<VmcCameraInfo> {
+) -> anyhow::Result<(VmcCameraInfo, Camera2ViewRect)> {
     let scenes_path = camera2_settings_folder.as_ref().join("Scenes.json");
     let scene_config: JsonSceneConfig = try_read_from_json_file(&scenes_path)?;
     let all_scenes = &[
@@ -318,17 +313,18 @@ pub fn read_camera2_info_from_config_files(
                 .to_array(),
             );
             let (_scale, rotation, translation) = transform.to_scale_rotation_translation();
-            return Ok(VmcCameraInfo {
+            let camera_info = VmcCameraInfo {
                 translation,
                 rotation,
                 fov: camera_config.fov,
-                view_rect: Camera2ViewRect {
-                    x: camera_config.view_rect.x,
-                    y: camera_config.view_rect.y,
-                    width: camera_config.view_rect.width,
-                    height: camera_config.view_rect.height,
-                },
-            });
+            };
+            let view_rect = Camera2ViewRect {
+                x: camera_config.view_rect.x,
+                y: camera_config.view_rect.y,
+                width: camera_config.view_rect.width,
+                height: camera_config.view_rect.height,
+            };
+            return Ok((camera_info, view_rect));
         }
     }
 
@@ -344,11 +340,12 @@ fn setup_reload_initial_camera_settings(
 ) {
     if !(*initialized) || keys.just_released(KeyCode::R) {
         match read_camera2_info_from_config_files(&settings.camera2_settings_folder) {
-            Ok(vmc_camera_info) => {
+            Ok((vmc_camera_info, view_rect)) => {
                 info!("read initial camera config: {:?}", &vmc_camera_info);
                 receive_buffer.0.push(vmc_camera_info);
                 let (mut camera, mut transform, mut projection) = camera_query.single_mut();
-                vmc_camera_info.set_camera_settings(&mut camera, &mut transform, &mut projection);
+                vmc_camera_info.set_camera_settings(&mut transform, &mut projection);
+                view_rect.set_camera_settings(&mut camera);
             }
             Err(e) => {
                 info!("failed to load initial camera settings: {:?}", e);

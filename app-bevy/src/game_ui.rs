@@ -46,7 +46,7 @@ impl Plugin for AppUiGamePlugin {
 pub fn spawn_3d_camera(mut commands: Commands) {
     commands.spawn((
         MainCamera,
-        VmcCameraMarker,
+        VmcCameraMarker::default(),
         Camera3dBundle {
             transform: Transform::from_translation(Vec3::new(0.5, 3.6, 2.6))
                 .looking_at(Vec3::new(0.0, 0.0, -0.8), Vec3::Y),
