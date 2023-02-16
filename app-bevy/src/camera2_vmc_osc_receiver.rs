@@ -305,9 +305,9 @@ pub fn read_camera2_info_from_config_files(
                     camera_config.target_pos.z,
                 ],
                 Quat::from_euler(
-                    EulerRot::XYZ,
-                    camera_config.target_rot.x * PI / 180.0,
+                    EulerRot::YXZ,
                     camera_config.target_rot.y * PI / 180.0,
+                    camera_config.target_rot.x * PI / 180.0,
                     camera_config.target_rot.z * PI / 180.0,
                 )
                 .to_array(),
