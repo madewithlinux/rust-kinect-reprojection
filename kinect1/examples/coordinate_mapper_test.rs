@@ -1,5 +1,5 @@
 use bytemuck::cast_slice;
-use glam::DVec4;
+use glam::{DVec3, DVec4};
 use indicatif::ProgressIterator;
 use itertools::Itertools;
 use kinect1::coordinate_mapper;
@@ -9,6 +9,7 @@ use ordered_float::OrderedFloat;
 const DEPTH_BUFFER: u16 = 100;
 const MIN_DEPTH_MM: u16 = 800 + DEPTH_BUFFER;
 const MAX_DEPTH_MM: u16 = 4000 - DEPTH_BUFFER;
+// const MAX_DEPTH_MM: u16 = 2000;
 const DEPTH_RANGE: u16 = MAX_DEPTH_MM - MIN_DEPTH_MM;
 
 fn main() {
@@ -20,6 +21,7 @@ fn main() {
     let depths = (0..num_depth_samples)
         .map(|i| MIN_DEPTH_MM + (DEPTH_RANGE as f64 * i as f64 / num_depth_samples as f64).round() as u16)
         .collect_vec();
+    // dbg!(&depths);
 
     println!("initializing kinect");
     let mut mapper = CoordinateMapperWrapper::init_new(args);
@@ -70,31 +72,35 @@ fn skeleton_frame_statistics(
     let mut max_point = DVec4::splat(0.0);
     let mut all_points = vec![];
     let mut depth_length_diff = vec![];
-    let mut point_normal_diff = vec![];
+    let mut point3_normal_diff = vec![];
 
     for x in 0..depth_width {
         for y in 0..depth_height {
-            let mut point_normal_min = DVec4::splat(1.0);
-            let mut point_normal_max = DVec4::splat(0.0);
+            let mut point3_normal_min = DVec3::splat(1.0);
+            let mut point3_normal_max = DVec3::splat(0.0);
             let flat_index = x + y * depth_width;
             for sample in 0..num_depth_samples {
-                let depth = depths[sample];
+                let depth_mm = depths[sample];
                 let point = skeleton_frames[sample][flat_index];
                 if point == DVec4::new(0.0, 0.0, 0.0, 1.0) {
                     continue;
                 }
+                let point3 = point.truncate();
 
                 min_point = min_point.min(point);
                 max_point = max_point.max(point);
                 all_points.push(point);
 
-                depth_length_diff.push((point.length() - (depth as f64)).abs());
+                depth_length_diff.push((point3.length() - (depth_mm as f64) / 1_000.0).abs());
 
-                let point_normal = point.normalize();
-                point_normal_min = point_normal_min.min(point_normal);
-                point_normal_max = point_normal_max.max(point_normal);
+                let point3_normal = point3.normalize();
+                point3_normal_min = point3_normal_min.min(point3_normal);
+                point3_normal_max = point3_normal_max.max(point3_normal);
             }
-            point_normal_diff.push((point_normal_max - point_normal_min).length());
+            if point3_normal_min != DVec3::splat(0.0) {
+                // point3_normal_diff.push((point3_normal_max - point3_normal_min).length());
+                point3_normal_diff.push((point3_normal_max.normalize() - point3_normal_min.normalize()).length());
+            }
         }
     }
 
@@ -117,7 +123,7 @@ fn skeleton_frame_statistics(
     statistics("all_points_w", &all_points_w);
 
     statistics("depth_length_diff", &depth_length_diff);
-    statistics("point_normal_diff", &point_normal_diff);
+    statistics("point3_normal_diff", &point3_normal_diff);
 }
 
 fn statistics(label: &str, v: &[f64]) {
