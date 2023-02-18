@@ -29,3 +29,6 @@ features = [
     "Win32_Security",
     "Win32_System_Threading",
 ]
+
+[dev-dependencies]
+indicatif = "0.17.3"

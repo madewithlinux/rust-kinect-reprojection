@@ -17,8 +17,8 @@
 		"cSpell.words": [
 			"bytemuck"
 		],
-		// "rust-analyzer.check.features": "all",
-		// "rust-analyzer.cargo.features": "all",
+		"rust-analyzer.check.features": "all",
+		"rust-analyzer.cargo.features": "all",
 		// "rust-analyzer.cargo.features": [
 		// 	"rust-kinect-reprojection-app-bevy/calibration",
 		// ]
