@@ -1,8 +1,7 @@
-use bytemuck::cast_slice;
 use glam::{DVec3, DVec4};
 use indicatif::ProgressIterator;
 use itertools::Itertools;
-use kinect1::coordinate_mapper;
+use kinect1::{coordinate_mapper, NUI_IMAGE_RESOLUTION_320X240};
 use kinect1::coordinate_mapper::CoordinateMapperWrapper;
 use ordered_float::OrderedFloat;
 
@@ -13,7 +12,9 @@ const MAX_DEPTH_MM: u16 = 4000 - DEPTH_BUFFER;
 const DEPTH_RANGE: u16 = MAX_DEPTH_MM - MIN_DEPTH_MM;
 
 fn main() {
-    let args = coordinate_mapper::ReceiverThreadArgs::default();
+    let mut args = coordinate_mapper::ReceiverThreadArgs::default();
+    // args.color_resolution = NUI_IMAGE_RESOLUTION_320X240;
+    // args.depth_resolution = NUI_IMAGE_RESOLUTION_320X240;
     let (depth_width, depth_height) = args.get_depth_size();
     let (color_width, color_height) = args.get_color_size();
 
@@ -28,15 +29,17 @@ fn main() {
     println!("kinect initialized");
 
     println!("getting skeleton frames");
+    println!("depth");
+    let depth_skeleton_frames: Vec<Vec<DVec4>> = depths
+    .iter()
+    .progress()
+    .map(|depth_mm| mapper.MapDepthFrameToSkeletonFrame(*depth_mm))
+    .collect_vec();
+    println!("color");
     let color_skeleton_frames: Vec<Vec<DVec4>> = depths
         .iter()
         .progress()
         .map(|depth_mm| mapper.MapColorFrameToSkeletonFrame(*depth_mm))
-        .collect_vec();
-    let depth_skeleton_frames: Vec<Vec<DVec4>> = depths
-        .iter()
-        .progress()
-        .map(|depth_mm| mapper.MapDepthFrameToSkeletonFrame(*depth_mm))
         .collect_vec();
     println!();
 
@@ -76,9 +79,11 @@ fn skeleton_frame_statistics(
 
     for x in 0..depth_width {
         for y in 0..depth_height {
+            // if x != depth_width/2 || y != depth_height/2 { continue; }
+            let flat_index = x + y * depth_width;
+
             let mut point3_normal_min = DVec3::splat(1.0);
             let mut point3_normal_max = DVec3::splat(0.0);
-            let flat_index = x + y * depth_width;
             for sample in 0..num_depth_samples {
                 let depth_mm = depths[sample];
                 let point = skeleton_frames[sample][flat_index];

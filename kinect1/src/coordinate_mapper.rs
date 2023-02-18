@@ -142,8 +142,8 @@ impl CoordinateMapperWrapper {
         let (color_width, color_height) = args.get_color_size();
         let (depth_width, depth_height) = args.get_depth_size();
         // TODO relax this requirement
-        assert_eq!((color_width, color_height), (depth_width, depth_height));
-        assert_eq!((color_width, color_height), (640, 480));
+        // assert_eq!((color_width, color_height), (depth_width, depth_height));
+        // assert_eq!((color_width, color_height), (640, 480));
 
         let mut out = Self {
             args,
@@ -279,7 +279,7 @@ impl CoordinateMapperWrapper {
             };
             self.depth_width * self.depth_height
         ];
-        let mut skeleton_points = vec![Default::default(); self.depth_width * self.depth_height];
+        let mut skeleton_points = vec![Default::default(); self.color_width * self.color_height];
 
         call_method!(
             self.coordinate_mapper,
