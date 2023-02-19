@@ -1,4 +1,6 @@
+use bytemuck::cast_slice;
 use glam::{DVec3, DVec4};
+use image::ImageBuffer;
 use indicatif::{ProgressBar, ProgressIterator};
 use itertools::Itertools;
 use kinect1::coordinate_mapper::CoordinateMapperWrapper;
@@ -59,6 +61,15 @@ fn main() {
 
     println!("make a DepthToColorMapping");
     let depth_color_mapping = mapper.build_depth_to_color_mapping();
+    // println!("visualize depth to color mapping");
+    // let rgba = depth_color_mapping
+    //     .initial_offsets
+    //     .iter()
+    //     .map(|[x, y]| [(*x as i32 + 128) as u8, (*y as i32 + 128) as u8, 0, 255])
+    //     .collect_vec();
+    // let image_buffer: ImageBuffer<image::Rgba<u8>, _> = ImageBuffer::from_raw(640, 480, cast_slice(&rgba)).unwrap();
+    // image_buffer.save("DepthToColorMapping_initial_offsets.png").unwrap();
+
     println!("check all values of DepthToColorMapping vs original");
     let bar = ProgressBar::new((depth_width * depth_height) as u64);
     for xi in 0..depth_width {
