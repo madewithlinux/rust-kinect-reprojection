@@ -25,6 +25,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     println!("initializing kinect");
     let mut mapper = CoordinateMapperWrapper::init_new(args);
     println!("kinect initialized");
+    println!("build_depth_to_color_mapping...");
+    let depth_color_mapping = mapper.build_depth_to_color_mapping();
+    println!("build_depth_to_color_mapping done");
 
     // let num_depth_samples = 100;
     // let depths = (0..num_depth_samples)
@@ -48,13 +51,16 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("map_depth_to_color_hypothetical_baseline", |b| {
         b.iter(|| map_depth_to_color_hypothetical_baseline(black_box(&packed_depth_frame)))
     });
+    c.bench_function("compute_depth_color_offset_frame", |b| {
+        b.iter(|| depth_color_mapping.compute_depth_color_offset_frame(black_box(&packed_depth_frame)))
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);
 
 fn map_depth_to_color_hypothetical_baseline(packed_depth_frame: &[u16]) -> Vec<DVec2> {
-// fn map_depth_to_color_hypothetical_baseline(packed_depth_frame: &[u16]) -> Vec<NUI_COLOR_IMAGE_POINT> {
+    // fn map_depth_to_color_hypothetical_baseline(packed_depth_frame: &[u16]) -> Vec<NUI_COLOR_IMAGE_POINT> {
     let depth_frame_pixels = packed_depth_frame
         .iter()
         .map(|&pd| NUI_DEPTH_IMAGE_PIXEL {

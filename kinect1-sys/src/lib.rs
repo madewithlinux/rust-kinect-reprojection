@@ -6,10 +6,12 @@ use bytemuck::{AnyBitPattern, Zeroable};
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+#[inline]
 pub fn NuiDepthPixelToDepth(packedPixel: u16) -> u16 {
     packedPixel >> NUI_IMAGE_PLAYER_INDEX_SHIFT
 }
 
+#[inline]
 pub fn NuiDepthPixelToPlayerIndex(packedPixel: u16) -> u16 {
     packedPixel & (NUI_IMAGE_PLAYER_INDEX_MASK as u16)
 }
@@ -79,7 +81,6 @@ impl Default for NUI_DEPTH_IMAGE_PIXEL {
         }
     }
 }
-
 
 impl Default for Vector4 {
     fn default() -> Self {

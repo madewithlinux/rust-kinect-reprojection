@@ -15,6 +15,7 @@ pub use kinect1_sys::{
     Vector4, NUI_SKELETON_DATA, NUI_SKELETON_FRAME, NUI_SKELETON_POSITION_TRACKING_STATE, NUI_SKELETON_TRACKING_STATE,
 };
 
+use num::complex::ComplexFloat;
 use tracing::{info, span};
 use tracing::{instrument, Level};
 use windows::Win32::{
@@ -89,6 +90,9 @@ impl Default for ReceiverThreadArgs {
         }
     }
 }
+
+const MIN_DEPTH_MM: u16 = 800;
+const MAX_DEPTH_MM: u16 = 4000;
 
 #[derive(Debug)]
 pub struct CoordinateMapperWrapper {
@@ -378,6 +382,69 @@ impl CoordinateMapperWrapper {
 
         convert_skeleton_points(skeleton_points)
     }
+
+    pub fn MapDepthPointToColorPoint(&mut self, x: usize, y: usize, depth_mm: u16) -> IVec2 {
+        let mut depth_point = NUI_DEPTH_IMAGE_POINT {
+            x: x as i32,
+            y: y as i32,
+            depth: depth_mm as i32,
+            reserved: 0,
+        };
+
+        let mut color_point = NUI_COLOR_IMAGE_POINT::default();
+        call_method!(
+            self.coordinate_mapper,
+            MapDepthPointToColorPoint,
+            self.args.depth_resolution,
+            &mut depth_point,
+            NUI_IMAGE_TYPE_COLOR,
+            self.args.color_resolution,
+            &mut color_point
+        );
+
+        IVec2::new(color_point.x, color_point.y)
+    }
+
+    pub fn find_depth_color_steps(&mut self, x: usize, y: usize) -> Vec<u16> {
+        let mut steps = vec![];
+        let mut prev_color_point = self.MapDepthPointToColorPoint(x, y, MIN_DEPTH_MM);
+        for depth_mm in MIN_DEPTH_MM..=MAX_DEPTH_MM {
+            let color_point = self.MapDepthPointToColorPoint(x, y, depth_mm);
+            if color_point != prev_color_point {
+                assert_eq!(color_point.y, prev_color_point.y);
+                assert!((color_point.x - prev_color_point.x).abs() == 1);
+                assert_eq!(color_point.x, prev_color_point.x - 1);
+                let x_offset = (x as i32) - color_point.x;
+                let y_offset = (y as i32) - color_point.y;
+                assert!(x_offset > i8::MIN as i32);
+                assert!(x_offset < i8::MAX as i32);
+                assert!(y_offset > i8::MIN as i32);
+                assert!(y_offset < i8::MAX as i32);
+
+                steps.push(depth_mm);
+                prev_color_point = color_point;
+            }
+        }
+        steps
+    }
+
+    pub fn build_depth_to_color_mapping(&mut self) -> DepthToColorMapping {
+        let depth_steps = self.find_depth_color_steps(0, 0);
+
+        let initial_offsets: Vec<[i8; 2]> = (0..(self.depth_width * self.depth_height))
+            .map(|flat_index| {
+                let x = flat_index % self.depth_width;
+                let y = flat_index / self.depth_width;
+                let color_point = self.MapDepthPointToColorPoint(x, y, MIN_DEPTH_MM);
+                [(color_point.x - (x as i32)) as i8, (color_point.y - (y as i32)) as i8]
+            })
+            .collect_vec();
+
+        DepthToColorMapping {
+            initial_offsets,
+            depth_steps,
+        }
+    }
 }
 
 fn convert_skeleton_points(skeleton_points: Vec<kinect1_sys::_Vector4>) -> Vec<DVec4> {
@@ -386,3 +453,56 @@ fn convert_skeleton_points(skeleton_points: Vec<kinect1_sys::_Vector4>) -> Vec<D
         .map(|v| Vec4::new(v.x, v.y, v.z, v.w).as_dvec4())
         .collect_vec()
 }
+
+pub struct DepthToColorMapping {
+    pub initial_offsets: Vec<[i8; 2]>,
+    pub depth_steps: Vec<u16>,
+}
+impl DepthToColorMapping {
+    pub fn compute_depth_color_offset_frame(&self, packed_depths: &[u16]) -> Vec<[i8; 2]> {
+        assert_eq!(packed_depths.len(), self.initial_offsets.len());
+
+        self.initial_offsets
+            .iter()
+            .zip(packed_depths.iter())
+            .map(|(initial_offset, packed_depth)| {
+                self.compute_depth_color_offset_helper(*initial_offset, *packed_depth)
+            })
+            .collect_vec()
+    }
+
+    pub fn compute_depth_color_mapping(&self, x: usize, y: usize, packed_depth: u16) -> IVec2 {
+        let flat_index = x + y * 640;
+        let offset = self.compute_depth_color_offset_helper(self.initial_offsets[flat_index], packed_depth);
+        IVec2::new(x as i32, y as i32) + IVec2::new(offset[0] as i32, offset[1] as i32)
+    }
+
+    fn compute_depth_color_offset_helper(&self, initial_offset: [i8; 2], packed_depth: u16) -> [i8; 2] {
+        let depth_mm = NuiDepthPixelToDepth(packed_depth);
+        let mut x = initial_offset[0];
+        let y = initial_offset[1];
+        for depth_step in self.depth_steps.iter() {
+            if depth_mm >= *depth_step {
+                x -= 1;
+            }
+        }
+        [x, y]
+        // // this is fancier but actually slower apparently
+        // if depth_mm < self.depth_steps[0] {
+        //     return initial_offset;
+        // }
+        // for i in 1..self.depth_steps.len() {
+        //     if depth_mm >= self.depth_steps[i - 1] && depth_mm < self.depth_steps[i] {
+        //         return [initial_offset[0] - i as i8, initial_offset[1]];
+        //     }
+        // }
+        // [initial_offset[0] - self.depth_steps.len() as i8, initial_offset[1]]
+    }
+}
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     #[test]
+//     fn test_coordinate_mapper_depth_to_color_mapping() {}
+// }
