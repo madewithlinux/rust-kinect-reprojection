@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use glam::{DVec3, DVec4};
+use glam::{DVec2, DVec3, DVec4};
 use indicatif::ProgressIterator;
 use itertools::Itertools;
 use kinect1::coordinate_mapper::CoordinateMapperWrapper;
@@ -37,25 +37,9 @@ fn main() {
         .progress()
         .map(|depth_mm| mapper.MapDepthFrameToSkeletonFrame(*depth_mm))
         .collect_vec();
-    // println!("color");
-    // let color_skeleton_frames: Vec<Vec<DVec4>> = depths
-    //     .iter()
-    //     .progress()
-    //     .map(|depth_mm| mapper.MapColorFrameToSkeletonFrame(*depth_mm))
-    //     .collect_vec();
     println!();
 
-    // println!("color skeleton frame statistics");
-    // dump_skeleton_frames(
-    //     depth_width,
-    //     depth_height,
-    //     num_depth_samples,
-    //     &depths,
-    //     &color_skeleton_frames,
-    // );
-    // println!();
-
-    println!("depth skeleton frame statistics");
+    println!("depth skeleton frame");
     let depth_buf = dump_skeleton_frames(
         depth_width,
         depth_height,
@@ -66,6 +50,24 @@ fn main() {
     std::fs::File::create("coordinate_mapper_depth_dump.csv")
         .unwrap()
         .write_all(&depth_buf)
+        .unwrap();
+    println!();
+
+    println!("getting depth_to_color_mapping");
+    let color_to_depth_mappings: Vec<Vec<DVec2>> = depths
+        .iter()
+        .progress()
+        .map(|depth_mm| mapper.MapDepthFrameToColorFrame(*depth_mm))
+        .collect_vec();
+    std::fs::File::create("coordinate_mapper_color_to_depth_mapping.csv")
+        .unwrap()
+        .write_all(&dump_depth_to_color_mapping(
+            depth_width,
+            depth_height,
+            num_depth_samples,
+            &depths,
+            &color_to_depth_mappings,
+        ))
         .unwrap();
     println!();
 }
@@ -98,6 +100,39 @@ fn dump_skeleton_frames(
                 // }
                 let DVec4 { x, y, z, w } = point;
                 writeln!(&mut buf, "{xi},{yi},{sample},{depth_mm},{x},{y},{z},{w}").unwrap();
+            }
+        }
+    }
+
+    buf
+}
+
+fn dump_depth_to_color_mapping(
+    depth_width: usize,
+    depth_height: usize,
+    num_depth_samples: usize,
+    depths: &[u16],
+    color_to_depth_mappings: &[Vec<DVec2>],
+) -> Vec<u8> {
+    let mut buf = Vec::new();
+    // write header
+    writeln!(&mut buf, "xi,yi,sample,depth_mm,cx,cy").unwrap();
+
+    for xi in 0..depth_width {
+        for yi in 0..depth_height {
+            // only output a subset of pixels to reduce data size
+            if xi % 10 != 0 || yi % 10 != 0 {
+                continue;
+            }
+
+            let flat_index = xi + yi * depth_width;
+
+            for sample in 0..num_depth_samples {
+                let depth_mm = depths[sample];
+                let point = color_to_depth_mappings[sample][flat_index];
+                let cx = point.x;
+                let cy = point.y;
+                writeln!(&mut buf, "{xi},{yi},{sample},{depth_mm},{cx},{cy}").unwrap();
             }
         }
     }

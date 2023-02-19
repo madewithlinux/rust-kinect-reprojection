@@ -2581,6 +2581,7 @@ name = "kinect1"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "criterion",
  "crossbeam",
  "enumset",
  "glam",
@@ -2592,6 +2593,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "ordered-float",
+ "rand",
  "thiserror",
  "tracing",
  "windows 0.43.0",

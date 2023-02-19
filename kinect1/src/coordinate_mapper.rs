@@ -2,7 +2,7 @@ use std::ptr::null_mut;
 
 use bytemuck::{cast_slice, try_cast_vec};
 
-use glam::{DVec4, Vec3, Vec4};
+use glam::{DVec2, DVec4, IVec2, UVec2, Vec3, Vec4};
 use itertools::Itertools;
 use kinect1_sys::{
     INuiCoordinateMapper, INuiFrameTexture, INuiSensor, NuiCreateSensorByIndex, NuiDepthPixelToDepth,
@@ -246,7 +246,64 @@ impl CoordinateMapperWrapper {
         call_method!(self.sensor, NuiGetCoordinateMapper, &mut self.coordinate_mapper);
     }
 
-    pub fn MapDepthFrameToColorFrame(&mut self, depth_mm: u16) -> Vec<NUI_COLOR_IMAGE_POINT> {
+    pub fn MapDepthFrameToColorFrame_for_frame(&mut self, packed_depth_frame: &[u16]) -> Vec<DVec2> {
+        assert_eq!(packed_depth_frame.len(), self.depth_width * self.depth_height);
+        let mut depth_frame_pixels = packed_depth_frame
+            .iter()
+            .map(|&pd| NUI_DEPTH_IMAGE_PIXEL {
+                depth: NuiDepthPixelToDepth(pd),
+                playerIndex: NuiDepthPixelToPlayerIndex(pd),
+            })
+            .collect_vec();
+        let mut color_frame_points: Vec<NUI_COLOR_IMAGE_POINT> =
+            vec![Default::default(); self.color_width * self.color_height];
+
+        call_method!(
+            self.coordinate_mapper,
+            MapDepthFrameToColorFrame,
+            self.args.depth_resolution,
+            depth_frame_pixels.len() as u32,
+            depth_frame_pixels.as_mut_ptr(),
+            NUI_IMAGE_TYPE_COLOR,
+            self.args.color_resolution,
+            color_frame_points.len() as u32,
+            color_frame_points.as_mut_ptr()
+        );
+
+        color_frame_points
+            .iter()
+            .map(|p| IVec2::new(p.x, p.y).as_dvec2())
+            .collect_vec()
+    }
+
+    pub fn map_skeleton_frame_to_color_points(&mut self, skeleton_frame: &[DVec4]) -> Vec<DVec2> {
+        skeleton_frame
+            .iter()
+            .map(|&skeleton_point| self.MapSkeletonPointToColorPoint(skeleton_point))
+            .collect_vec()
+    }
+    pub fn MapSkeletonPointToColorPoint(&mut self, skeleton_point: DVec4) -> DVec2 {
+        let mut skeleton_point = Vector4 {
+            x: skeleton_point.x as f32,
+            y: skeleton_point.y as f32,
+            z: skeleton_point.z as f32,
+            w: skeleton_point.w as f32,
+        };
+
+        let mut color_point = NUI_COLOR_IMAGE_POINT::default();
+        call_method!(
+            self.coordinate_mapper,
+            MapSkeletonPointToColorPoint,
+            &mut skeleton_point,
+            NUI_IMAGE_TYPE_COLOR,
+            self.args.color_resolution,
+            &mut color_point
+        );
+
+        IVec2::new(color_point.x, color_point.y).as_dvec2()
+    }
+
+    pub fn MapDepthFrameToColorFrame(&mut self, depth_mm: u16) -> Vec<DVec2> {
         let mut depth_frame_pixels = vec![
             NUI_DEPTH_IMAGE_PIXEL {
                 depth: depth_mm,
@@ -269,6 +326,9 @@ impl CoordinateMapperWrapper {
         );
 
         color_frame_points
+            .iter()
+            .map(|p| IVec2::new(p.x, p.y).as_dvec2())
+            .collect_vec()
     }
 
     pub fn MapColorFrameToSkeletonFrame(&mut self, depth_mm: u16) -> Vec<DVec4> {

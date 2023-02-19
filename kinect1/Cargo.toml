@@ -32,3 +32,9 @@ features = [
 
 [dev-dependencies]
 indicatif = "0.17.3"
+criterion = "0.4"
+rand = "0.8.5"
+
+[[bench]]
+name = "coordinate_mapper_depth_to_color"
+harness = false
