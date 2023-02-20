@@ -249,6 +249,8 @@ fn static_frame_system(
         );
         *last_update_ms = current_ms;
     }
+    // remove old frames to avoid leaking memory
+    frame_delay_buffer.0.pop_for_delay(settings.fixed_delay_ms * 2);
 }
 
 pub struct KinectReceiverPlugin;
