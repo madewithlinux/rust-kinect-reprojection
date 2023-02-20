@@ -250,6 +250,7 @@ impl CoordinateMapperWrapper {
         call_method!(self.sensor, NuiGetCoordinateMapper, &mut self.coordinate_mapper);
     }
 
+    #[allow(non_snake_case)]
     pub fn MapDepthFrameToColorFrame_for_frame(&mut self, packed_depth_frame: &[u16]) -> Vec<DVec2> {
         assert_eq!(packed_depth_frame.len(), self.depth_width * self.depth_height);
         let mut depth_frame_pixels = packed_depth_frame
@@ -286,6 +287,7 @@ impl CoordinateMapperWrapper {
             .map(|&skeleton_point| self.MapSkeletonPointToColorPoint(skeleton_point))
             .collect_vec()
     }
+    #[allow(non_snake_case)]
     pub fn MapSkeletonPointToColorPoint(&mut self, skeleton_point: DVec4) -> DVec2 {
         let mut skeleton_point = Vector4 {
             x: skeleton_point.x as f32,
@@ -307,6 +309,7 @@ impl CoordinateMapperWrapper {
         IVec2::new(color_point.x, color_point.y).as_dvec2()
     }
 
+    #[allow(non_snake_case)]
     pub fn MapDepthFrameToColorFrame(&mut self, depth_mm: u16) -> Vec<DVec2> {
         let mut depth_frame_pixels = vec![
             NUI_DEPTH_IMAGE_PIXEL {
@@ -335,6 +338,7 @@ impl CoordinateMapperWrapper {
             .collect_vec()
     }
 
+    #[allow(non_snake_case)]
     pub fn MapColorFrameToSkeletonFrame(&mut self, depth_mm: u16) -> Vec<DVec4> {
         let mut depth_frame_pixels = vec![
             NUI_DEPTH_IMAGE_PIXEL {
@@ -360,6 +364,7 @@ impl CoordinateMapperWrapper {
         convert_skeleton_points(skeleton_points)
     }
 
+    #[allow(non_snake_case)]
     pub fn MapDepthFrameToSkeletonFrame(&mut self, depth_mm: u16) -> Vec<DVec4> {
         let mut depth_frame_pixels = vec![
             NUI_DEPTH_IMAGE_PIXEL {
@@ -383,6 +388,7 @@ impl CoordinateMapperWrapper {
         convert_skeleton_points(skeleton_points)
     }
 
+    #[allow(non_snake_case)]
     pub fn MapDepthPointToColorPoint(&mut self, x: usize, y: usize, depth_mm: u16) -> IVec2 {
         let mut depth_point = NUI_DEPTH_IMAGE_POINT {
             x: x as i32,

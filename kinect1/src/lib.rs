@@ -67,7 +67,10 @@ use winresult::{HResult, HResultError};
 mod hresult_helper;
 pub mod skeleton;
 pub mod worker_v2;
-pub mod coordinate_mapper;
+pub mod coordinate_mapper_wrapper;
+pub mod packed_depth;
+pub mod kinect_wrapper_v3;
+pub mod custom_coordinate_mapper;
 
 #[derive(Error, Debug)]
 pub enum KinectError {
@@ -104,6 +107,7 @@ pub fn get_sensor_count() -> KinectResult<i32> {
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct ImageFrameInfo {
+    // TODO: reduce the number of fields here, there's too many lol
     pub width: usize,
     pub height: usize,
     pub timestamp: i64,

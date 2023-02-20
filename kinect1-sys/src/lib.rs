@@ -7,12 +7,12 @@ use bytemuck::{AnyBitPattern, Zeroable};
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[inline]
-pub fn NuiDepthPixelToDepth(packedPixel: u16) -> u16 {
+pub const fn NuiDepthPixelToDepth(packedPixel: u16) -> u16 {
     packedPixel >> NUI_IMAGE_PLAYER_INDEX_SHIFT
 }
 
 #[inline]
-pub fn NuiDepthPixelToPlayerIndex(packedPixel: u16) -> u16 {
+pub const fn NuiDepthPixelToPlayerIndex(packedPixel: u16) -> u16 {
     packedPixel & (NUI_IMAGE_PLAYER_INDEX_MASK as u16)
 }
 

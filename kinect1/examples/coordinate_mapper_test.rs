@@ -1,8 +1,8 @@
 use glam::{DVec3, DVec4};
 use indicatif::ProgressIterator;
 use itertools::Itertools;
-use kinect1::{coordinate_mapper, NUI_IMAGE_RESOLUTION_320X240};
-use kinect1::coordinate_mapper::CoordinateMapperWrapper;
+use kinect1::{coordinate_mapper_wrapper, NUI_IMAGE_RESOLUTION_320X240};
+use kinect1::coordinate_mapper_wrapper::CoordinateMapperWrapper;
 use ordered_float::OrderedFloat;
 
 const DEPTH_BUFFER: u16 = 100;
@@ -12,7 +12,7 @@ const MAX_DEPTH_MM: u16 = 4000 - DEPTH_BUFFER;
 const DEPTH_RANGE: u16 = MAX_DEPTH_MM - MIN_DEPTH_MM;
 
 fn main() {
-    let mut args = coordinate_mapper::ReceiverThreadArgs::default();
+    let mut args = coordinate_mapper_wrapper::ReceiverThreadArgs::default();
     // args.color_resolution = NUI_IMAGE_RESOLUTION_320X240;
     // args.depth_resolution = NUI_IMAGE_RESOLUTION_320X240;
     let (depth_width, depth_height) = args.get_depth_size();

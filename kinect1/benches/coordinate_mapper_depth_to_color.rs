@@ -5,8 +5,8 @@ use rand::Rng;
 use glam::{DVec2, DVec3, DVec4, IVec2};
 use itertools::Itertools;
 
-use kinect1::coordinate_mapper::CoordinateMapperWrapper;
-use kinect1::{coordinate_mapper, NuiDepthPixelToDepth, NuiDepthPixelToPlayerIndex, NUI_IMAGE_RESOLUTION_320X240};
+use kinect1::coordinate_mapper_wrapper::CoordinateMapperWrapper;
+use kinect1::{coordinate_mapper_wrapper, NuiDepthPixelToDepth, NuiDepthPixelToPlayerIndex, NUI_IMAGE_RESOLUTION_320X240};
 use rand::prelude::Distribution;
 
 const DEPTH_BUFFER: u16 = 100;
@@ -16,7 +16,7 @@ const MAX_DEPTH_MM: u16 = 4000 - DEPTH_BUFFER;
 const DEPTH_RANGE: u16 = MAX_DEPTH_MM - MIN_DEPTH_MM;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let mut args = coordinate_mapper::ReceiverThreadArgs::default();
+    let mut args = coordinate_mapper_wrapper::ReceiverThreadArgs::default();
     // args.color_resolution = NUI_IMAGE_RESOLUTION_320X240;
     // args.depth_resolution = NUI_IMAGE_RESOLUTION_320X240;
     let (depth_width, depth_height) = args.get_depth_size();
