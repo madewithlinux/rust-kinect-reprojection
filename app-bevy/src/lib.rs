@@ -7,6 +7,7 @@ use itertools::Itertools;
 pub mod app_settings;
 pub mod camera2_vmc_osc_receiver;
 pub mod delay_buffer;
+pub mod depth_model2;
 pub mod depth_texture;
 #[cfg(feature = "calibration")]
 pub mod frame_visualization_util;
@@ -15,17 +16,20 @@ pub mod receiver;
 mod util;
 
 #[cfg(feature = "calibration")]
+pub mod calibration_ui;
+#[cfg(feature = "calibration")]
 pub mod debug_coordinates;
 #[cfg(feature = "calibration")]
 pub mod dock_ui;
 #[cfg(feature = "calibration")]
 pub mod game_ui;
 #[cfg(feature = "calibration")]
-pub mod vr_connector;
-#[cfg(feature = "calibration")]
-pub mod calibration_ui;
-#[cfg(feature = "calibration")]
 pub mod gui_common;
+#[cfg(feature = "calibration")]
+pub mod vr_connector;
+
+#[cfg(feature = "renderdoc_api")]
+pub mod renderdoc_api;
 
 pub const COLOR_WIDTH: usize = 640;
 pub const COLOR_HEIGHT: usize = 480;
@@ -130,16 +134,20 @@ pub fn app_main() {
                 .add_plugin(vr_connector::VrConnectorPlugin);
             #[cfg(not(feature = "calibration"))]
             panic!("calibration/debug UI isn't enabled");
-        },
+        }
     }
 
     #[cfg(feature = "calibration")]
     app.register_type::<frame_visualization_util::FrameBufferImageHandle>()
         .register_type::<frame_visualization_util::FrameBufferDescriptor>();
 
+    #[cfg(feature = "renderdoc_api")]
+    app.add_plugin(renderdoc_api::RenderDocApiPlugin);
+
     app //
         .add_plugin(receiver::KinectReceiverPlugin)
-        .add_plugin(depth_texture::DepthTexturePlugin)
+        // .add_plugin(depth_texture::DepthTexturePlugin)
+        .add_plugin(depth_model2::DepthModel2Plugin)
         .add_plugin(camera2_vmc_osc_receiver::OscReceiverPlugin)
         .register_type::<MainCamera>()
         .run();

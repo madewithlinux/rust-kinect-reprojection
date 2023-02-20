@@ -1,8 +1,8 @@
 {
   "ui_mode": "Dock",
   "kinect_enabled": true,
-  "kinect_static_frame asdf": "kinect_framebuffers.json",
-  "vr_input_enabled": true,
+  "kinect_static_frame no": "kinect_framebuffers.json",
+  "vr_input_enabled": false,
   "camera2_vmc_enabled": false,
   "kinect_transform": {
     "position": [0.12620316, 2.435134, 1.9299076],
