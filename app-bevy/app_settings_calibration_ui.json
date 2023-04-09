@@ -9,6 +9,7 @@
   "camera2_vmc_enabled": false,
   "history_buffer_size": 2,
   "fixed_delay_ms": 0,
+  "kinect_tracker_serial": "LHR-3E4411E3",
   "no kinect_static_frame": "kinect_framebuffers.json",
   "show_debug_axes": true,
   "show_debug_entities": true,

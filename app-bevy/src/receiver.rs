@@ -17,6 +17,7 @@ use kinect1::{
 use crate::app_settings::use_kinect_static_frame;
 use crate::delay_buffer::query_performance_counter_ms;
 use crate::util::read_from_json_file;
+use crate::vr_connector::OpenVrPoseData;
 use crate::{
     app_settings::{kinect_enabled, AppSettings},
     delay_buffer::DelayBuffer,
@@ -39,7 +40,18 @@ pub struct KinectDepthTransformer {
     point_transform_matrix_inverse: Affine3A,
     pub point_cloud_skel: bool,
 }
-fn update_depth_transformer(mut kdt: ResMut<KinectDepthTransformer>, settings: Res<AppSettings>) {
+fn update_depth_transformer(
+    mut kdt: ResMut<KinectDepthTransformer>,
+    settings: Res<AppSettings>,
+    pose_data_opt: Option<Res<OpenVrPoseData>>,
+) {
+    if let (Some(pose_data), Some(kinect_tracker_offset)) = (pose_data_opt, settings.kinect_tracker_offset) {
+        if pose_data.kinect_tracker.is_good {
+            kdt.point_transform_matrix = pose_data.kinect_tracker.transform * kinect_tracker_offset;
+            kdt.point_transform_matrix_inverse = kdt.point_transform_matrix.inverse();
+            return;
+        }
+    }
     if !settings.is_added() && !settings.is_changed() {
         return;
     }

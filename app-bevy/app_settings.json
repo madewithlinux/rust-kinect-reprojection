@@ -2,7 +2,7 @@
   "ui_mode": "Dock",
   "kinect_enabled": true,
   "kinect_static_frame no": "kinect_framebuffers.json",
-  "vr_input_enabled": false,
+  "vr_input_enabled": true,
   "camera2_vmc_enabled": false,
   "kinect_transform": {
     "position": [0.12620316, 2.435134, 1.9299076],
@@ -13,9 +13,11 @@
       0.0698683, 2.38094235, 1.90655908
     ]
   },
+  "kinect_tracker_serial": "LHR-3E4411E3",
   "history_buffer_size": 2,
   "fixed_delay_ms": 500,
   "show_debug_axes": true,
-  "show_debug_entities": true,
+  "show_debug_entities": false,
+  "show_debug_coordinate_matchup": false,
   "show_debug_skeleton": true
 }

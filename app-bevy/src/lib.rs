@@ -25,7 +25,6 @@ pub mod dock_ui;
 pub mod game_ui;
 #[cfg(feature = "calibration")]
 pub mod gui_common;
-#[cfg(feature = "calibration")]
 pub mod vr_connector;
 
 #[cfg(feature = "renderdoc_api")]
@@ -111,7 +110,8 @@ pub fn app_main() {
             app.insert_resource(Msaa { samples: 1 })
                 // .add_plugin(game_ui::AppUiGamePlugin)
                 // we don't need the whole game UI, just a camera
-                .add_startup_system(camera2_vmc_osc_receiver::spawn_3d_camera);
+                .add_startup_system(camera2_vmc_osc_receiver::spawn_3d_camera)
+                .add_plugin(vr_connector::VrConnectorPlugin);
         }
         UiMode::Dock => {
             #[cfg(feature = "calibration")]

@@ -36,8 +36,10 @@ bevy_osc = "0.5.0"
 nannou_osc = "0.18.0"
 iyes_loopless = "0.9.1"
 
+# non-optional because we now use vive tracker for kinect position
+openvr = { version = "0.6.0" }
+
 # dependencies needed only for the debug UI (and later, the calibration UI)
-openvr = { version = "0.6.0", optional = true }
 bevy_prototype_debug_lines = { version = "0.9", features = [
     "3d",
 ], optional = true }
@@ -62,10 +64,10 @@ features = ["Win32_Foundation", "Win32_System_Performance"]
 
 
 [features]
-# default = []
-default = ["calibration", "backtrace"]
+default = []
+# default = ["calibration", "backtrace"]
 skeleton_frame = []
-calibration = ["skeleton_frame", "debug_helpers", "openvr", "bevy-inspector-egui", "egui", "bevy_egui", "egui_dock", "rfd", "smooth-bevy-cameras", "bevy/filesystem_watcher", "bevy/render", "bevy/bevy_sprite", "bevy/bevy_pbr", "bevy/bevy_gltf", "bevy/bevy_text", "bevy/bevy_ui", "bevy/png", "bevy/hdr", "bevy/vorbis"]
+calibration = ["skeleton_frame", "debug_helpers", "bevy-inspector-egui", "egui", "bevy_egui", "egui_dock", "rfd", "smooth-bevy-cameras", "bevy/filesystem_watcher", "bevy/render", "bevy/bevy_sprite", "bevy/bevy_pbr", "bevy/bevy_gltf", "bevy/bevy_text", "bevy/bevy_ui", "bevy/png", "bevy/hdr", "bevy/vorbis"]
 debug_helpers = ["bevy_prototype_debug_lines"]
 renderdoc_api = ["renderdoc"]
 backtrace = ["anyhow/backtrace"]

@@ -3,15 +3,19 @@ use std::f32::consts::PI;
 use bevy::{math::Affine3A, prelude::*};
 use iyes_loopless::prelude::*;
 
+#[cfg(feature = "debug_helpers")]
 use bevy_prototype_debug_lines::DebugLines;
+
 use openvr::TrackingResult;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     app_settings::{debug_axes_enabled, vr_input_enabled, AppSettings},
     delay_buffer::{query_performance_counter_ms, DelayBuffer},
-    util::draw_debug_axes,
 };
+
+#[cfg(feature = "debug_helpers")]
+use crate::util::draw_debug_axes;
 
 pub struct OpenVrContextSystem(openvr::Context, openvr::System);
 
@@ -143,6 +147,7 @@ pub struct OpenVrPoseData {
     pub right_controller: TrackedDevicePose,
     pub right_controller_button_state: ControllerButtonState,
     pub right_controller_button_events: ControllerButtonEvents,
+    pub kinect_tracker: TrackedDevicePose,
 }
 impl OpenVrPoseData {
     pub fn get_controller_data(
@@ -221,6 +226,11 @@ fn update_pose_data(
                     pose_data.right_controller = TrackedDevicePose::from(pose);
                 }
             }
+            openvr::TrackedDeviceClass::GenericTracker => {
+                if is_kinect_tracker(&settings, system, i) {
+                    pose_data.kinect_tracker = TrackedDevicePose::from(pose);
+                }
+            }
             _ => (), // skip other tracking data
         }
     }
@@ -231,10 +241,27 @@ fn update_pose_data(
     // *delayed_pose_data = pose_data_buffer.pop_for_delay(FIXED_DELAY_MS).unwrap_or_default();
 }
 
+fn is_kinect_tracker(settings: &Res<AppSettings>, system: &openvr::System, i: usize) -> bool {
+    let Some(kinect_tracker_serial) = &settings.kinect_tracker_serial  else {
+        return false;
+    };
+    let Some(tracker_serial) = system.string_tracked_device_property(
+        i as u32,
+        openvr::property::SerialNumber_String
+    ).ok() else {
+        return false;
+    };
+    return kinect_tracker_serial.as_bytes() == tracker_serial.as_bytes();
+}
+
+#[cfg(feature = "debug_helpers")]
 fn debug_pose_data(pose_data: Res<OpenVrPoseData>, mut lines: ResMut<DebugLines>) {
     draw_debug_axes(&mut lines, &pose_data.hmd.transform, 0.2);
     draw_debug_axes(&mut lines, &pose_data.left_controller.transform, 0.2);
     draw_debug_axes(&mut lines, &pose_data.right_controller.transform, 0.2);
+    if pose_data.kinect_tracker.is_good {
+        draw_debug_axes(&mut lines, &pose_data.kinect_tracker.transform, 0.2);
+    }
 }
 
 #[derive(Component, Debug, Default, Clone, Reflect)]
@@ -244,6 +271,7 @@ pub enum VrPoseMarker {
     Hmd,
     LeftController,
     RightController,
+    KinectTracker,
 }
 
 fn spawn_vr_pose_markers(
@@ -266,6 +294,16 @@ fn spawn_vr_pose_markers(
         unlit: true,
         ..Default::default()
     });
+
+    commands.spawn((
+        Name::new("kinect_tracker"),
+        VrPoseMarker::KinectTracker,
+        PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Box::new(0.06, 0.06, 0.06))),
+            material: green.clone(),
+            ..default()
+        },
+    ));
 
     commands.spawn((
         Name::new("hmd"),
@@ -322,6 +360,7 @@ fn update_vr_pose_markers(mut query: Query<(&VrPoseMarker, &mut Transform)>, vr_
             VrPoseMarker::Hmd => Transform::from_matrix(vr_pose_data.hmd.transform.into()),
             VrPoseMarker::LeftController => Transform::from_matrix(vr_pose_data.left_controller.transform.into()),
             VrPoseMarker::RightController => Transform::from_matrix(vr_pose_data.right_controller.transform.into()),
+            VrPoseMarker::KinectTracker => Transform::from_matrix(vr_pose_data.kinect_tracker.transform.into()),
         };
     }
 }
@@ -333,6 +372,10 @@ impl Plugin for VrConnectorPlugin {
             .insert_resource(OpenVrPoseData::default())
             .add_startup_system(setup_openvr_connector.run_if(vr_input_enabled))
             .add_system(update_pose_data.run_if(vr_input_enabled))
+            .register_type::<OpenVrPoseData>()
+            .register_type::<VrPoseMarker>();
+        #[cfg(feature = "debug_helpers")]
+        app //
             .add_system(debug_pose_data.run_if(vr_input_enabled).run_if(debug_axes_enabled))
             // TODO: set visibility instead?
             .add_startup_system(
@@ -344,8 +387,6 @@ impl Plugin for VrConnectorPlugin {
                 update_vr_pose_markers
                     .run_if(vr_input_enabled)
                     .run_if(debug_axes_enabled),
-            )
-            .register_type::<OpenVrPoseData>()
-            .register_type::<VrPoseMarker>();
+            );
     }
 }

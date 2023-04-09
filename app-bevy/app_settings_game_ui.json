@@ -4,20 +4,27 @@
   "window_width": 1280,
   "window_height": 720,
   "window_scale_factor_override": 1.0,
-  "framerate_limit": 30,
   "window_resizable": false,
   "greenscreen": true,
   "min_total_threads": 0,
   "max_total_threads": 2,
   "kinect_enabled": true,
-  "vr_input_enabled": false,
+  "vr_input_enabled": true,
   "camera2_vmc_enabled": true,
-  "history_buffer_size": 2,
-  "fixed_delay_ms": 500,
-  "kinect_static_frame": "kinect_framebuffers.json",
+  "kinect_transform": {
+    "position": [0.12620316, 2.435134, 1.9299076],
+    "euler_rotation": [148.47508, -0.13849427, -176.70303],
+    "scale": [1.0000001, 1.0, 1.0],
+    "raw_transform": [
+      -1.00222934, 0.03625069, -0.0346105, 0.02667785, 0.87146665, -0.50177901, 0.0338467, -0.53250339, -0.84743627,
+      0.0698683, 2.38094235, 1.90655908
+    ]
+  },
+  "kinect_tracker_serial": "LHR-3E4411E3",
+  "fixed_delay_ms": 450,
   "depth_texture_always_use_player_index": true,
-  "show_debug_axes": false,
-  "show_debug_entities": false,
-  "show_debug_skeleton": false,
+  "show_debug_axes": true,
+  "show_debug_entities": true,
+  "show_debug_skeleton": true,
   "show_debug_coordinate_matchup": false
 }

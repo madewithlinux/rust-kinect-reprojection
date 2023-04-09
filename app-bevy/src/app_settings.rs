@@ -82,6 +82,8 @@ pub struct AppSettings {
     pub depth_texture_do_lookahead: bool,
     pub depth_texture_always_use_player_index: bool,
     pub camera2_settings_folder: String,
+    pub kinect_tracker_serial: Option<String>,
+    pub kinect_tracker_offset: Option<Affine3A>,
     // debugging options
     pub show_debug_axes: bool,
     pub show_debug_entities: bool,
@@ -118,6 +120,11 @@ impl Default for AppSettings {
             depth_texture_do_lookahead: true,
             depth_texture_always_use_player_index: false,
             camera2_settings_folder: DEFAULT_CAMERA2_SETTINGS_FOLDER.to_string(),
+            kinect_tracker_serial: None,
+            kinect_tracker_offset: Some(Affine3A::from_rotation_translation(
+                Quat::from_rotation_y(std::f32::consts::PI),
+                Vec3::new(0.0, -0.08, -0.0507),
+            )),
 
             show_debug_axes: true,
             show_debug_entities: true,
