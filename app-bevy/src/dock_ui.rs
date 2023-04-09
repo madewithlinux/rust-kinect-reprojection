@@ -1,15 +1,15 @@
 use std::any::TypeId;
 use std::time::SystemTime;
 
-use bevy::prelude::*;
 use bevy::asset::{HandleId, ReflectAsset};
+use bevy::prelude::*;
+use bevy::render::camera::Viewport;
 use bevy_inspector_egui::bevy_inspector::hierarchy::{hierarchy_ui, SelectedEntities};
 use bevy_inspector_egui::bevy_inspector::{self, ui_for_entities_shared_components};
 use bevy_inspector_egui::{reflect_inspector, DefaultInspectorConfigPlugin};
 use bevy_reflect::TypeRegistry;
-use bevy::render::camera::Viewport;
 use bytemuck::checked::cast_slice;
-use egui::{Pos2, Rect};
+use egui::{Pos2, Rect, ScrollArea};
 use egui_dock::{NodeIndex, Tree};
 use image::{ImageBuffer, Luma};
 use kinect1::skeleton::SkeletonTrackingState;
@@ -17,6 +17,7 @@ use smooth_bevy_cameras::controllers::orbit::{OrbitCameraBundle, OrbitCameraCont
 use smooth_bevy_cameras::LookTransformPlugin;
 
 use crate::frame_visualization_util::{update_framebuffer_images, FrameBufferDescriptor, FrameBufferImageHandle};
+use crate::time_series_plot::{update_debug_timing_plots, DebugTimingPlots};
 use crate::util::write_to_json_file;
 use crate::vr_connector::OpenVrPoseData;
 use crate::{MainCamera, COLOR_HEIGHT, COLOR_WIDTH, DEPTH_HEIGHT, DEPTH_WIDTH};
@@ -28,6 +29,8 @@ impl Plugin for AppUiDockPlugin {
             .add_plugin(DefaultInspectorConfigPlugin)
             .add_plugin(bevy_egui::EguiPlugin)
             .insert_resource(UiState::new())
+            .init_resource::<DebugTimingPlots>()
+            .add_system(update_debug_timing_plots)
             .add_system_to_stage(CoreStage::PreUpdate, show_ui_system.at_end())
             // .add_startup_system(spawn_2d_camera)
             .add_plugin(LookTransformPlugin)
@@ -92,6 +95,7 @@ impl UiState {
     pub fn new() -> Self {
         let mut tree = Tree::new(vec![
             Window::GameView,
+            Window::DebugTimingPlots,
             Window::FrameBuffer(FrameBufferDescriptor::Rgba),
             Window::FrameBuffer(FrameBufferDescriptor::SkeletonPointCloud),
             // Window::FrameBuffer(FrameBufferDescriptor::CurrentDepth),
@@ -153,6 +157,7 @@ enum Window {
     Inspector,
     Controls,
     FrameBuffer(FrameBufferDescriptor),
+    DebugTimingPlots,
 }
 
 struct TabViewer<'a> {
@@ -220,6 +225,14 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                     )
                 };
                 ui.image(texture_id, image_size);
+            }
+            Window::DebugTimingPlots => {
+                ScrollArea::vertical().show(ui, |ui| {
+                    self.world
+                        .resource_scope::<DebugTimingPlots, _>(|world, mut timing_plots| {
+                            timing_plots.ui(ui, &type_registry);
+                        })
+                });
             }
         }
     }

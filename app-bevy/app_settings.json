@@ -15,7 +15,7 @@
   },
   "kinect_tracker_serial": "LHR-3E4411E3",
   "history_buffer_size": 2,
-  "fixed_delay_ms": 500,
+  "fixed_delay_ms": 130,
   "show_debug_axes": true,
   "show_debug_entities": false,
   "show_debug_coordinate_matchup": false,

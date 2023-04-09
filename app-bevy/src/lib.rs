@@ -29,6 +29,8 @@ pub mod vr_connector;
 
 #[cfg(feature = "renderdoc_api")]
 pub mod renderdoc_api;
+#[cfg(feature = "calibration")]
+pub mod time_series_plot;
 
 pub const COLOR_WIDTH: usize = 640;
 pub const COLOR_HEIGHT: usize = 480;

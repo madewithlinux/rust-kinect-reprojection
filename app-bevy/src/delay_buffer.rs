@@ -73,4 +73,14 @@ impl<T> DelayBuffer<T> {
             };
         }
     }
+
+    pub fn len(&self) -> usize {
+        self.dequeue.len()
+    }
+    pub fn oldest_timestamp(&self) -> i64 {
+        self.dequeue.front().map_or_else(|| query_performance_counter_ms(), |(timestamp, _)| *timestamp)
+    }
+    pub fn newest_timestamp(&self) -> i64 {
+        self.dequeue.back().map_or_else(|| query_performance_counter_ms(), |(timestamp, _)| *timestamp)
+    }
 }
