@@ -264,6 +264,49 @@ fn debug_pose_data(pose_data: Res<OpenVrPoseData>, mut lines: ResMut<DebugLines>
     }
 }
 
+#[cfg(feature = "debug_helpers")]
+fn debug_chaperone_play_area(open_vr_context_system: NonSend<OpenVrContextSystem>, mut lines: ResMut<DebugLines>) {
+    let Some(chaperone) = open_vr_context_system.0.chaperone().ok() else {
+        warn!("failed to get chaperone");
+        return;
+    };
+    let Some(play_area_rect) = chaperone.get_play_area_rect() else {
+        warn!("failed to get play area rect");
+        return;
+    };
+    info!("play_area_rect: {:?}", &play_area_rect);
+    let corners = play_area_rect.map(|p| Vec3::from_array(p));
+    let edges = [
+        (corners[0], corners[1]),
+        (corners[1], corners[2]),
+        (corners[2], corners[3]),
+        (corners[3], corners[0]),
+    ];
+    let min_height = 0.0f32;
+    let max_height = 2.5f32;
+    // vertical lines
+    for p in corners {
+        lines.line_colored(
+            Vec3 { y: min_height, ..p },
+            Vec3 { y: max_height, ..p },
+            // this system runs only once, so we want these lines to stay put
+            f32::INFINITY,
+            Color::VIOLET,
+        );
+    }
+    // horizontal lines
+    for height in [min_height, max_height] {
+        for (p0, p1) in edges {
+            lines.line_colored(
+                Vec3 { y: height, ..p0 },
+                Vec3 { y: height, ..p1 },
+                f32::INFINITY,
+                Color::VIOLET,
+            );
+        }
+    }
+}
+
 #[derive(Component, Debug, Default, Clone, Reflect)]
 #[reflect(Debug, Component)]
 pub enum VrPoseMarker {
@@ -374,9 +417,15 @@ impl Plugin for VrConnectorPlugin {
             .add_system(update_pose_data.run_if(vr_input_enabled))
             .register_type::<OpenVrPoseData>()
             .register_type::<VrPoseMarker>();
+
         #[cfg(feature = "debug_helpers")]
         app //
             .add_system(debug_pose_data.run_if(vr_input_enabled).run_if(debug_axes_enabled))
+            .add_startup_system(
+                debug_chaperone_play_area
+                    .run_if(vr_input_enabled)
+                    .run_if(debug_axes_enabled),
+            )
             // TODO: set visibility instead?
             .add_startup_system(
                 spawn_vr_pose_markers

@@ -4,6 +4,9 @@ use std::io::Write;
 use bevy::{math::Affine3A, prelude::*};
 use iyes_loopless::prelude::*;
 
+#[cfg(feature = "debug_helpers")]
+use bevy_prototype_debug_lines::DebugLines;
+
 use kinect1::worker_v2::ReceiverThreadArgs;
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -14,6 +17,7 @@ use kinect1::{
     worker_v2::{start_frame_thread2, FrameMessage, FrameMessageReceiver},
 };
 
+use crate::app_settings::debug_axes_enabled;
 use crate::app_settings::use_kinect_static_frame;
 use crate::delay_buffer::query_performance_counter_ms;
 use crate::util::read_from_json_file;
@@ -156,6 +160,58 @@ impl KinectDepthTransformer {
     }
 }
 
+#[cfg(feature = "debug_helpers")]
+fn kinect_view_frustum_debug_lines(kdt: Res<KinectDepthTransformer>, mut lines: ResMut<DebugLines>) {
+    // let origin = kdt.coordinate_depth_to_world(DEPTH_WIDTH / 2, DEPTH_HEIGHT / 2, 20);
+    let near_depth_mm = 800;
+    let far_depth_mm = 4000;
+
+    // let corners = [(0, 0), (DEPTH_WIDTH, 0), (DEPTH_WIDTH, DEPTH_HEIGHT), (0, DEPTH_HEIGHT)];
+    // these are the approximate coordinates in RGB space of the limits of the depth sensor
+    let corners = [
+        (33, 10), //
+        (620, 14),
+        (627, 459),
+        (30, 456),
+    ];
+    let edges = [
+        (corners[0], corners[1]),
+        (corners[1], corners[2]),
+        (corners[2], corners[3]),
+        (corners[3], corners[0]),
+    ];
+
+    // too near
+    for (i, j) in corners {
+        lines.line_colored(
+            kdt.coordinate_depth_to_world(i, j, 20),
+            kdt.coordinate_depth_to_world(i, j, near_depth_mm),
+            0.0,
+            Color::RED,
+        );
+    }
+
+    // sweet spot
+    for depth in [near_depth_mm, far_depth_mm] {
+        for ((i0, j0), (i1, j1)) in edges {
+            lines.line_colored(
+                kdt.coordinate_depth_to_world(i0, j0, depth),
+                kdt.coordinate_depth_to_world(i1, j1, depth),
+                0.0,
+                Color::GREEN,
+            );
+        }
+    }
+    for (i, j) in corners {
+        lines.line_colored(
+            kdt.coordinate_depth_to_world(i, j, near_depth_mm),
+            kdt.coordinate_depth_to_world(i, j, far_depth_mm),
+            0.0,
+            Color::GREEN,
+        );
+    }
+}
+
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct KinectFrameBuffers {
     pub timestamp: i64,
@@ -290,6 +346,14 @@ impl Plugin for KinectReceiverPlugin {
             )
             .add_system(update_depth_transformer.run_if(kinect_enabled))
             .register_type::<KinectDepthTransformer>();
+
+        #[cfg(feature = "debug_helpers")]
+        app //
+            .add_system(
+                kinect_view_frustum_debug_lines
+                    .run_if(kinect_enabled)
+                    .run_if(debug_axes_enabled),
+            );
     }
 }
 
