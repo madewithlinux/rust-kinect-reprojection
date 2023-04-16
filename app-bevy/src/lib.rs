@@ -109,7 +109,8 @@ pub fn app_main() {
 
     match settings.ui_mode {
         UiMode::Game => {
-            app.insert_resource(Msaa { samples: 1 })
+            // app.insert_resource(Msaa { samples: 1 })
+            app
                 // .add_plugin(game_ui::AppUiGamePlugin)
                 // we don't need the whole game UI, just a camera
                 .add_startup_system(camera2_vmc_osc_receiver::spawn_3d_camera)

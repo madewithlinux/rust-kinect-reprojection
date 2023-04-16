@@ -122,10 +122,18 @@ impl Default for AppSettings {
             camera2_settings_folder: DEFAULT_CAMERA2_SETTINGS_FOLDER.to_string(),
             kinect_tracker_serial: None,
             kinect_tracker_offset: Some(Affine3A::from_rotation_translation(
-                Quat::from_rotation_y(std::f32::consts::PI),
-                Vec3::new(0.0, -0.08, -0.0507),
+                Quat::from_rotation_y(-std::f32::consts::PI / 2.0) * Quat::from_rotation_z(std::f32::consts::PI / 2.0),
+                // Vec3::new(-54.895, 29.244, 90.839) / 1_000.0,
+                // onshape => this offset
+                // +X => +Y
+                // +Y => -Z
+                // +Z => -X
+                Vec3::new(-90.839, -54.895, 29.244) / 1_000.0,
             )),
-
+            // kinect_tracker_offset: Some(Affine3A::from_rotation_translation(
+            //     Quat::from_rotation_y(std::f32::consts::PI),
+            //     Vec3::new(0.0, -0.08, -0.0507),
+            // )),
             show_debug_axes: true,
             show_debug_entities: true,
             show_debug_skeleton: true,
