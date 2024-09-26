@@ -143,7 +143,7 @@ fn osc_event_listener_system(
     let timestamp = query_performance_counter_ms();
 
     for event in events.iter() {
-        // info!("osc event: {:?}", &event.packet);
+        info!("osc event: {:?}", &event.packet);
         match &event.packet {
             Packet::Message(Message { addr, args }) => {
                 if addr != CAMERA2_VMC_ADDR {
@@ -161,10 +161,10 @@ fn osc_event_listener_system(
                             draw_debug_axes(&mut lines, &transform, 0.2);
                         }
                         let (scale, rotation, translation) = transform.to_scale_rotation_translation();
-                        // info!("timestamp   = {:?}", timestamp);
-                        // info!("scale       = {:?}", scale);
-                        // info!("rotation    = {:?}", rotation);
-                        // info!("translation = {:?}", translation);
+                        info!("timestamp   = {:?}", timestamp);
+                        info!("scale       = {:?}", scale);
+                        info!("rotation    = {:?}", rotation);
+                        info!("translation = {:?}", translation);
                         receive_buffer.0.push_for_timestamp(
                             timestamp,
                             VmcCameraInfo {

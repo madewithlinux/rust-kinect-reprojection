@@ -20,6 +20,8 @@ opt-level = 1
 # Enable high optimizations for dependencies (incl. Bevy), but not for our code:
 [profile.dev.package."*"]
 opt-level = 3
+debug = true
+debug-assertions = false
 
 # [patch.crates-io]
 # wasm-bindgen = { git = 'https://github.com/rustwasm/wasm-bindgen.git' }

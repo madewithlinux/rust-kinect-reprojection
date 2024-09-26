@@ -2,6 +2,7 @@
   "ui_mode": "Dock",
   "kinect_enabled": true,
   "kinect_static_frame no": "kinect_framebuffers.json",
+  "camera2_settings_folder": "C:\\Users\\jools\\Documents\\BSManager\\BSInstances\\1.37.0\\UserData\\Camera2",
   "vr_input_enabled": true,
   "camera2_vmc_enabled": false,
   "kinect_transform": {
